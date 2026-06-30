@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GunPartData" format=3 uid="uid://dlwoysc457cgu"]
+
+[ext_resource type="Script" uid="uid://bq2sk4pe3loli" path="res://Data/GunPartData.cs" id="1_kdxo2"]
+
+[resource]
+script = ExtResource("1_kdxo2")
+Slot = 1
+Weight = 1.2
+ItemId = "barrel_ar_standard_t1"
+DisplayName = "标准AR枪管"
+MaxStack = 1
+QualityTier = 1
+BaseValue = 300
+metadata/_custom_type_script = "uid://bq2sk4pe3loli"

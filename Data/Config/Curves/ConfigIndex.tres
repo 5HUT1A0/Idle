@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="ConfigIndex" format=3 uid="uid://cbct1hdtvl7im"]
+
+[ext_resource type="Script" uid="uid://c3k0lmtaw0rv" path="res://Data/ConfigIndex.cs" id="1_pvjhu"]
+
+[resource]
+script = ExtResource("1_pvjhu")
+Entries = null
+metadata/_custom_type_script = "uid://c3k0lmtaw0rv"

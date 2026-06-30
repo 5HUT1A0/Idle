@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ConfigIndex" format=3 uid="uid://bh452nv8gwphn"]
+
+[ext_resource type="Script" uid="uid://c3k0lmtaw0rv" path="res://Data/ConfigIndex.cs" id="1_72bra"]
+[ext_resource type="Resource" uid="uid://dlwoysc457cgu" path="res://Data/Config/Guns/barrel_ar_standard_t1.tres" id="1_rjuqi"]
+[ext_resource type="Resource" uid="uid://j8b7ugs6ty6n" path="res://Data/Config/Guns/body_ar_t1.tres" id="2_ppxeo"]
+[ext_resource type="Resource" uid="uid://bushkloklgopc" path="res://Data/Config/Guns/mag_ar_standard_t1.tres" id="3_d8b78"]
+
+[resource]
+script = ExtResource("1_72bra")
+Entries = Array[Resource]([ExtResource("1_rjuqi"), ExtResource("2_ppxeo"), ExtResource("3_d8b78")])
+metadata/_custom_type_script = "uid://c3k0lmtaw0rv"

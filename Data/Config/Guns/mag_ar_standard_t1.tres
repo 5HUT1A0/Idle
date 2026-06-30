@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="GunPartData" format=3 uid="uid://bushkloklgopc"]
+
+[ext_resource type="Script" uid="uid://bq2sk4pe3loli" path="res://Data/GunPartData.cs" id="1_5whbm"]
+
+[resource]
+script = ExtResource("1_5whbm")
+Slot = 2
+BaseCapacity = 30
+ItemId = "mag_ar_standard_t1"
+DisplayName = "标准AR弹匣（30发）"
+QualityTier = 1
+metadata/_custom_type_script = "uid://bq2sk4pe3loli"

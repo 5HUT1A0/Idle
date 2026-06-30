@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GunPartData" format=3 uid="uid://j8b7ugs6ty6n"]
+
+[ext_resource type="Script" uid="uid://bq2sk4pe3loli" path="res://Data/GunPartData.cs" id="1_u4gwu"]
+
+[resource]
+script = ExtResource("1_u4gwu")
+Weight = 3.5
+ItemId = "body_ar_t1"
+DisplayName = "T1 AR 枪身"
+Description = "标准突击步枪机匣，5.45口径"
+MaxStack = 1
+QualityTier = 1
+BaseValue = 800
+metadata/_custom_type_script = "uid://bq2sk4pe3loli"
