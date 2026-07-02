@@ -1,20 +1,145 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
+
+/// <summary>
+/// 运行时数据中心 Autoload（优先级 4）。
+/// 持有所有运行时可变数据。数据变更 → _isDirty + EventBus 信号广播。
+/// 依赖：EventBus。
+/// </summary>
 public partial class DataManager : Node
 {
 	public static DataManager Instance { get; private set; }
+	private bool _isDirty;
+	private Dictionary<string, string> _dirtyState = new();
 
+
+	//=================================================
+	//玩家属性
+	//=================================================
+	private int _scrapCurrency;
+	public int ScrapCurrency
+	{
+		get => _scrapCurrency;
+		set
+		{
+			if (_scrapCurrency == value)
+			{
+				return;
+			}
+			int delta = value - _scrapCurrency;
+			_scrapCurrency = value;
+			MarkDirty("scrap_currency", value.ToString());
+			EventBus.Instance.EmitSignal(EventBus.SignalName.CurrencyChanged, "scrap", _scrapCurrency, delta);
+		}
+	}
+
+	private float _hunger = 100f;
+	public float Hunger
+	{
+		get => _hunger;
+		set
+		{
+			_hunger = Mathf.Clamp(value, 0f, 100f);
+			MarkDirty("hunger", _hunger.ToString("F1"));
+		}
+	}
+
+	private float _thirst = 100f;
+	public float Thirst
+	{
+		get => _thirst;
+		set
+		{
+			_thirst = Mathf.Clamp(value, 0f, 100f);
+			MarkDirty("thirst", _thirst.ToString("F1"));
+		}
+	}
+
+	// 部位 HP（后续 BodyStateSystem 会用到）
+	public float HpHead { get; set; } = 100f;
+	public float HpChest { get; set; } = 100f;
+	public float HpAbdomen { get; set; } = 100f;
+	public float HpLeftArm { get; set; } = 100f;
+	public float HpRightArm { get; set; } = 100f;
+	public float HpLeftLeg { get; set; } = 100f;
+	public float HpRightLeg { get; set; } = 100f;
+
+	//=================================================
+	//生命周期
+	//=================================================
 	public override void _Ready()
 	{
 		Instance = this;
+
+		// 从 SaveManager 取回存档数据（如果存在）
+		var savedState = SaveManager.Instance.TakeLoadedState();
+		if (savedState != null)
+		{
+			LoadState(savedState);
+		}
+
+		GD.Print($"[DataManager] 就绪 | 废土币:{_scrapCurrency} 饥饿:{_hunger} 口渴:{_thirst}");
 	}
+
+	// ═══════════════════════════════════════════════
+	// 存档接口（由 SaveManager 调用）
+	// ═══════════════════════════════════════════════
+
+	/// <summary>
+	/// SaveManager 加载存档后调用，填充运行时数据。
+	/// </summary>
 
 	public void LoadState(Dictionary<string, string> state)
-	{ }
+	{
+		_scrapCurrency = GetInt(state, "scrap_currency", 500);
+		_hunger = GetFloat(state, "hunger", 100f);
+		_thirst = GetFloat(state, "thirst", 100f);
+		HpHead = GetFloat(state, "hp_head", 100f);
+		HpChest = GetFloat(state, "hp_chest", 100f);
+		HpAbdomen = GetFloat(state, "hp_abdomen", 100f);
+		HpLeftArm = GetFloat(state, "hp_left_arm", 100f);
+		HpRightArm = GetFloat(state, "hp_right_arm", 100f);
+		HpLeftLeg = GetFloat(state, "hp_left_leg", 100f);
+		HpRightLeg = GetFloat(state, "hp_right_leg", 100f);
 
+		GD.Print($"[DataManager] 存档数据已加载 | 废土币:{_scrapCurrency}");
+
+	}
+
+	/// <summary>
+	/// SaveManager.DoFlush() 调用，收集所有脏数据批量写入。
+	/// </summary>
 	public Dictionary<string, string> CollectDirtyState()
 	{
-		return new Dictionary<string, string>();
+		var snapshot = new Dictionary<string, string>(_dirtyState);
+		_dirtyState.Clear();
+		_isDirty = false;
+		return snapshot;
 	}
+
+	public bool IsDirty() => _isDirty;
+
+	//================================================
+	//私有方法
+	//================================================
+	private void MarkDirty(string key, string value)
+	{
+		_isDirty = true;
+		_dirtyState[key] = value;
+
+	}
+
+	private static int GetInt(Dictionary<string, string> dict, string key, int fallback)
+	{
+		return dict.TryGetValue(key, out var v) && int.TryParse(v, out var result) ? result : fallback;
+	}
+
+	private static float GetFloat(Dictionary<string, string> dict, string key, float fallback)
+	{
+		return dict.TryGetValue(key, out var v) && float.TryParse(v, out var result) ? result : fallback;
+	}
+
+
 }

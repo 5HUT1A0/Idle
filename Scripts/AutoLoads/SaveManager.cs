@@ -16,6 +16,15 @@ public partial class SaveManager : Node
 	public static SaveManager Instance { get; private set; }
 	private const int CurrentVersion = 1;
 	private const int MaxBackupCount = 3;
+	private Dictionary<string, string> _loadedState;  // 启动时加载的状态缓存
+
+	/// <summary>供 DataManager._Ready() 取走加载的状态。取后清空。</summary>
+	public Dictionary<string, string> TakeLoadedState()
+	{
+		var state = _loadedState;
+		_loadedState = null;
+		return state;
+	}
 
 	private string _savePath;
 	private string BackupPath(int n) => _savePath.Replace(".db", $"_backup_{n}.db");
@@ -35,7 +44,7 @@ public partial class SaveManager : Node
 		{
 			try
 			{
-				LoadSave();
+				_loadedState = LoadSave();
 				GD.Print($"[SaveManager]存档已加载：{_savePath}");
 			}
 			catch (Exception ex)
@@ -170,7 +179,7 @@ public partial class SaveManager : Node
 	// 加载
 	//======================================================================
 
-	private void LoadSave()
+	private Dictionary<string, string> LoadSave()
 	{
 		using var db = new SqliteConnection($"Data Source={_savePath}");
 		db.Open();
@@ -196,7 +205,7 @@ public partial class SaveManager : Node
 		reader.Close();
 
 		//DataManager 应为 AutoLoad优先级4，此时已_Ready()，可以直接调用
-		DataManager.Instance.LoadState(state);
+		return state;
 	}
 
 	private void RunMigrations(SqliteConnection db, int fromVersion)
