@@ -1,0 +1,324 @@
+using Godot;
+using System;
+using Microsoft.Data.Sqlite;
+using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
+
+
+/// <summary>
+/// 存档系统 Autoload（优先级 2）。
+/// SQLite 读写、事务管理、自动备份、版本迁移。
+/// 依赖：EventBus → 订阅 SaveRequested 信号。
+/// </summary>
+public partial class SaveManager : Node
+{
+	public static SaveManager Instance { get; private set; }
+	private const int CurrentVersion = 1;
+	private const int MaxBackupCount = 3;
+
+	private string _savePath;
+	private string BackupPath(int n) => _savePath.Replace(".db", $"_backup_{n}.db");
+
+	private bool _flushScheduled;
+
+	//======================================================================
+	// Godot 生命周期
+	//======================================================================
+
+	public override void _Ready()
+	{
+		Instance = this;
+		_savePath = ProjectSettings.GlobalizePath("user://save.db");
+
+		if (FileAccess.FileExists(_savePath))
+		{
+			try
+			{
+				LoadSave();
+				GD.Print($"[SaveManager]存档已加载：{_savePath}");
+			}
+			catch (Exception ex)
+			{
+				GD.PrintErr($"[SaveManager]加载存档失败：{ex.Message}");
+				EventBus.Instance.EmitSignal(EventBus.SignalName.SaveLoadFailed, ex.Message);
+			}
+		}
+		else
+		{
+			CreateTable();
+			GD.Print("[SaveManager]已新建存档");
+		}
+
+		//订阅存盘请求
+		EventBus.Instance.SaveRequested += OnSaveRequested;
+	}
+
+	private void OnSaveRequested()
+	{
+		if (_flushScheduled) return;
+		_flushScheduled = true;
+		CallDeferred(nameof(DoFlush));
+	}
+
+	//======================================================================
+	// 建表
+	//======================================================================
+
+	private void CreateTable()
+	{
+		using var db = new SqliteConnection($"Data Source={_savePath}");
+		db.Open();
+
+		var ddl = @"
+		CREATE TABLE IF NOT EXISTS player_state (
+			Key TEXT PRIMARY KEY,
+			Value TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS inventory (
+			slot_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+			item_id     TEXT NOT NULL,
+			quantity    INTEGER NOT NULL DEFAULT 1,
+			durability  REAL,
+			custom_json TEXT,
+			location    TEXT DEFAULT 'stash'
+		);
+
+		CREATE TABLE IF NOT EXISTS custom_guns (
+			gun_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+			gun_name    TEXT,
+			body_id     TEXT NOT NULL,
+			barrel_id   TEXT NOT NULL,
+			magazine_id TEXT NOT NULL,
+			sight_id    TEXT,
+			muzzle_id   TEXT,
+			durability  REAL DEFAULT 100,
+			insured_by  TEXT
+		);
+
+		CREATE TABLE IF NOT EXISTS custom_armors (
+			armor_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+			helmet_id       TEXT,
+			liner_id        TEXT NOT NULL,
+			front_plate_id  TEXT,
+			rear_plate_id   TEXT,
+			left_plate_id   TEXT,
+			right_plate_id  TEXT,
+			durability_json TEXT,
+			insured_by      TEXT
+		);
+
+		CREATE TABLE IF NOT EXISTS progress (
+			key   TEXT PRIMARY KEY,
+			value TEXT
+		);
+
+		CREATE TABLE IF NOT EXISTS save_meta (
+			id         INTEGER PRIMARY KEY CHECK(id = 1),
+			version    INTEGER NOT NULL,
+			last_close TEXT NOT NULL,
+			hash       TEXT NOT NULL
+		);
+
+		INSERT OR REPLACE INTO save_meta (id, version, last_close, hash)
+		VALUES (1, @version, @now, '');
+		";
+
+		using var cmd = new SqliteCommand(ddl, db);
+		cmd.Parameters.AddWithValue("@version", CurrentVersion);
+		cmd.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
+		cmd.ExecuteNonQuery();
+
+		//写入默认玩家状态
+		InitDefaultState(db);
+	}
+
+	private void InitDefaultState(SqliteConnection db)
+	{
+		var defaults = new Dictionary<string, string>
+		{
+			["scrap_currency"] = "500",
+			["hunger"] = "100",
+			["thirst"] = "100",
+			["hp_head"] = "100",
+			["hp_chest"] = "100",
+			["hp_abdomen"] = "100",
+			["hp_left_arm"] = "100",
+			["hp_right_arm"] = "100",
+			["hp_left_leg"] = "100",
+			["hp_right_leg"] = "100",
+			["stamina_level"] = "1",
+			["knowledge_level"] = "1",
+			["reload_cd_level"] = "1",
+			["repair_proficiency_level"] = "1",
+			["max_weight"] = "25",
+			["prestige_count"] = "0",
+			["survivor_mark"] = "0",
+		};
+
+		foreach (var (key, value) in defaults)
+		{
+			using var cmd = new SqliteCommand("INSERT OR REPLACE INTO player_state (key, value) VALUES (@k, @v)", db);
+			cmd.Parameters.AddWithValue("@k", key);
+			cmd.Parameters.AddWithValue("@v", value);
+			cmd.ExecuteNonQuery();
+		}
+	}
+
+	//======================================================================
+	// 加载
+	//======================================================================
+
+	private void LoadSave()
+	{
+		using var db = new SqliteConnection($"Data Source={_savePath}");
+		db.Open();
+
+		// 检查版本
+		using var metaCmd = new SqliteCommand("SELECT version FROM save_meta WHERE id = 1", db);
+		var versionObj = metaCmd.ExecuteScalar();
+		int saveVersion = versionObj != null ? Convert.ToInt32(versionObj) : 0;
+
+		if (saveVersion < CurrentVersion)
+		{
+			RunMigrations(db, saveVersion);
+		}
+
+		//加载 player_state →推给DataManager
+		var state = new Dictionary<string, string>();
+		using var stateCmd = new SqliteCommand("SELECT key, value FROM player_state", db);
+		using var reader = stateCmd.ExecuteReader();
+		while (reader.Read())
+		{
+			state[reader.GetString(0)] = reader.GetString(1);
+		}
+		reader.Close();
+
+		//DataManager 应为 AutoLoad优先级4，此时已_Ready()，可以直接调用
+		DataManager.Instance.LoadState(state);
+	}
+
+	private void RunMigrations(SqliteConnection db, int fromVersion)
+	{
+		for (int v = fromVersion; v < CurrentVersion; v++)
+		{
+			GD.Print($"[SaveManager] 执行迁移 v{v} → v{v + 1}");
+			// 后续版本在这里添加迁移脚本
+		}
+
+		using var updateMeta = new SqliteCommand("UPDATE save_meta SET version = @v WHERE id = 1", db);
+		updateMeta.Parameters.AddWithValue("@v", CurrentVersion);
+		updateMeta.ExecuteNonQuery();
+	}
+
+	//======================================================================
+	// 写入
+	//======================================================================
+
+	private void DoFlush()
+	{
+		try
+		{
+			using var db = new SqliteConnection($"Data Source={_savePath}");
+			db.Open();
+			using var tx = db.BeginTransaction();
+
+			//写入 player_state(只写入dirty字段)
+			var dirtyState = DataManager.Instance.CollectDirtyState();
+			foreach (var (key, value) in dirtyState)
+			{
+				using var cmd = new SqliteCommand(
+	  				"INSERT OR REPLACE INTO player_state (key, value) VALUES (@k, @v)", db, tx);
+				cmd.Parameters.AddWithValue("@k", key);
+				cmd.Parameters.AddWithValue("@v", value);
+				cmd.ExecuteNonQuery();
+			}
+
+			//更新 元数据
+			var hash = ComputeHash(db);
+			using var metaCmd = new SqliteCommand(
+				 "UPDATE save_meta SET last_close = @now, hash = @hash WHERE id = 1", db, tx);
+			metaCmd.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
+			metaCmd.Parameters.AddWithValue("@hash", hash);
+			metaCmd.ExecuteNonQuery();
+
+			tx.Commit();
+			_flushScheduled = false;
+
+			RotateBackups();
+			EventBus.Instance.EmitSignal(EventBus.SignalName.SaveCompleted);
+			GD.Print("[SaveManager] 存档已完成");
+		}
+		catch (Exception ex)
+		{
+			GD.PushError($"[SaveManager] 存档失败: {ex.Message}");
+			_flushScheduled = false;
+		}
+	}
+
+
+	//======================================================================
+	// 哈希+备份
+	//======================================================================
+
+	private string ComputeHash(SqliteConnection db)
+	{
+		//简易哈希：对 player_state 全表内容做 SHA256
+		using var cmd = new SqliteCommand("SELECT key, value FROM player_state ORDER BY key", db);
+		using var reader = cmd.ExecuteReader();
+		var sb = new StringBuilder();
+
+		while (reader.Read())
+		{
+			sb.Append(reader.GetString(0)).Append("=").Append(reader.GetString(1)).Append("\n");
+		}
+		reader.Close();
+
+		var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+		return Convert.ToHexString(bytes);
+	}
+
+	private void RotateBackups()
+	{
+		// save_backup_1 → save_backup_2 → save_backup_3 → 删除
+		try
+		{
+			if (FileAccess.FileExists(BackupPath(MaxBackupCount)))
+			{
+				DirAccess.RemoveAbsolute(BackupPath(MaxBackupCount));
+			}
+
+			for (int n = MaxBackupCount - 1; n >= 1; n--)
+			{
+				var older = BackupPath(n);
+				var newer = BackupPath(n + 1);
+				if (FileAccess.FileExists(older))
+				{
+					if (FileAccess.FileExists(newer))
+					{
+						DirAccess.RemoveAbsolute(newer);
+					}
+					DirAccess.RenameAbsolute(older, newer);
+				}
+			}
+
+			//复制当前存档 → 创新的backup_1
+			DirAccess.CopyAbsolute(_savePath, BackupPath(1));
+		}
+		catch (Exception ex)
+		{
+			GD.PushError($"[SaveManager] 备份失败: {ex.Message}");
+		}
+	}
+
+	//======================================================================
+	// 外部接口
+	//======================================================================
+
+	/// <summary>请求存盘（由外部系统调用）</summary>
+	public static void RequestSave()
+	{
+		EventBus.Instance.EmitSignal(EventBus.SignalName.SaveRequested);
+	}
+}
