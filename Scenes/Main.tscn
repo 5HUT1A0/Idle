@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://dy6ond6oflhmi"]
+
+[ext_resource type="PackedScene" uid="uid://bq081re3k5mas" path="res://Scenes/SafeHouse/SafeHousePanel.tscn" id="1_idj7w"]
+[ext_resource type="PackedScene" uid="uid://cq5u3p381nkfr" path="res://Scenes/CombatZone/CombatZonePanel.tscn" id="2_kln2b"]
+
+[node name="Test" type="Node2D" unique_id=772339631]
+
+[node name="SafeHousePanel" parent="." unique_id=1754595451 instance=ExtResource("1_idj7w")]
+
+[node name="CombatZonePanel" parent="." unique_id=1513134904 instance=ExtResource("2_kln2b")]
+visible = false

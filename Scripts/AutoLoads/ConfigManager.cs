@@ -10,7 +10,7 @@ using System.Linq;
 /// </summary>
 public partial class ConfigManager : Node
 {
-	public ConfigManager Instace { get; private set; }
+	public static ConfigManager Instance { get; private set; }
 
 	//===============================
 	//内存字典
@@ -20,13 +20,15 @@ public partial class ConfigManager : Node
 	private Dictionary<string, GunPartData> _gunPartDb = new();
 	private Dictionary<string, AmmoData> _ammoDb = new();
 	private Dictionary<string, LevelCurve> _curveDb = new();
+	private Dictionary<string, EnemyData> _enemyDb = new();
+	private Dictionary<string, MapDistanceConfig> _mapDb = new();
 
 	//==============================
 	//生命周期
 	//==============================
 	public override void _Ready()
 	{
-		Instace = this;
+		Instance = this;
 		LoadAllConfigs();
 		GD.Print($"[ConfigManager] 加载完成 | 物品:{_itemDb.Count} 配件:{_gunPartDb.Count} 弹药:{_ammoDb.Count} 曲线:{_curveDb.Count}");
 	}
@@ -53,6 +55,13 @@ public partial class ConfigManager : Node
 			// LevelCurve.ItemId 作为 key
 			_curveDb[curve.ItemId] = curve;
 		});
+		// 敌人配置
+		LoadIndex("res://Data/Config/Enemies/ConfigIndex.tres", (EnemyData enemy) =>
+		_enemyDb[enemy.EnemyId] = enemy);
+
+		// 地图距离分布
+		LoadIndex("res://Data/Config/Maps/ConfigIndex.tres", (MapDistanceConfig map) =>
+		_mapDb[map.MapId] = map);
 	}
 
 	/// <summary>
@@ -98,6 +107,12 @@ public partial class ConfigManager : Node
 
 		if (typeof(T) == typeof(AmmoData) || typeof(T).IsSubclassOf(typeof(AmmoData)))
 			return _ammoDb.TryGetValue(Id, out var ammo) ? ammo as T : null;
+
+		if (typeof(T) == typeof(EnemyData) || typeof(T).IsSubclassOf(typeof(EnemyData)))
+			return _enemyDb.TryGetValue(Id, out var e) ? e as T : null;
+
+		if (typeof(T) == typeof(MapDistanceConfig) || typeof(T).IsSubclassOf(typeof(MapDistanceConfig)))
+			return _mapDb.TryGetValue(Id, out var m) ? m as T : null;
 
 		//默认走物品总表（BaseItemData及其单独建表子类）
 		return _itemDb.TryGetValue(Id, out var item) ? item as T : null;
