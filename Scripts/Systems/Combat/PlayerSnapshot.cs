@@ -10,6 +10,7 @@ public struct PlayerSnapshot
 	public float RangeCorrection;      // 射程修正（乘算）
 
 	// ── 惩罚
+	public float TotalWeight;
 	public float WeightPenalty;        // 重量惩罚
 	public float SidePlatePenalty;     // 侧板惩罚
 

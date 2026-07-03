@@ -112,7 +112,6 @@ public static class DamageCalculator
 		return Mathf.Max(factory, 0f);//超出最大射程范围返回0(无伤害)
 	}
 
-
 	// ═══════════════════════════════════════════════
 	// ③ 命中判定
 	// ═══════════════════════════════════════════════
@@ -120,6 +119,25 @@ public static class DamageCalculator
 	/// <summary>
 	/// 命中率 = 学识 × 熟练度 × 精度 × 射程修正 − 侧板惩罚 − 重档惩罚
 	/// 钳制到 [5%, 95%]。
+	/// </summary>
+	public static float CalcHitChance(PlayerSnapshot p, float weightPenalty, float rangeCorrection)
+	{
+		float raw = p.KnowledgeBonus * p.ProficiencyBonus * p.GunAccuracy * rangeCorrection
+					- p.SidePlatePenalty - weightPenalty;
+
+		return Mathf.Clamp(raw, MinHitChance, MaxHitChance);
+	}
+
+	/// <summary>命中判定——返回 true 表示命中</summary>
+	public static bool RollHit(float hitChance)
+		=> GD.Randf() < hitChance;
+
+	// ═══════════════════════════════════════════════
+	// ④ 部位判定
+	// ═══════════════════════════════════════════════
+
+	/// <summary>
+	/// 根据命中率确定命中档位，按各档权重随机抽部位。
 	/// </summary>
 	public static BodyPart RollBodyPart(float hitChance)
 	{

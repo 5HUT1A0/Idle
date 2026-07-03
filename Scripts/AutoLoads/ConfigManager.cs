@@ -132,6 +132,12 @@ public partial class ConfigManager : Node
 		if (typeof(T) == typeof(AmmoData) || typeof(T).IsSubclassOf(typeof(AmmoData)))
 			return _ammoDb.Values.Cast<T>();
 
+		if (typeof(T) == typeof(EnemyData) || typeof(T).IsSubclassOf(typeof(EnemyData)))
+			return _enemyDb.Values.Cast<T>();
+
+		if (typeof(T) == typeof(MapDistanceConfig) || typeof(T).IsSubclassOf(typeof(MapDistanceConfig)))
+			return _mapDb.Values.Cast<T>();
+
 		return _itemDb.Values.OfType<T>();
 	}
 

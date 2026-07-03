@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="EnemyData" format=3 uid="uid://co4pwub88ehaw"]
+
+[ext_resource type="Script" uid="uid://bx0lje6dfo56y" path="res://Data/EnemyData.cs" id="1_3bd6u"]
+
+[resource]
+script = ExtResource("1_3bd6u")
+EnemyId = "pmc_01"
+DisplayName = "pmc_01"
+Type = 1
+Tier = 2
+HeadHp = 20.0
+ChestHp = 40.0
+AbdomenHp = 35.0
+LeftArmHp = 20.0
+RightArmHp = 20.0
+LeftLegHp = 20.0
+RightLegHp = 20.0
+metadata/_custom_type_script = "uid://bx0lje6dfo56y"

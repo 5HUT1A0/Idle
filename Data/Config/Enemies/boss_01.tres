@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="EnemyData" format=3 uid="uid://dy8kn0jqq4q4d"]
+
+[ext_resource type="Script" uid="uid://bx0lje6dfo56y" path="res://Data/EnemyData.cs" id="1_2yk82"]
+
+[resource]
+script = ExtResource("1_2yk82")
+EnemyId = "boss_01"
+DisplayName = "boss_01"
+Type = 2
+Tier = 3
+HeadHp = 25.0
+ChestHp = 40.0
+AbdomenHp = 35.0
+LeftArmHp = 30.0
+RightArmHp = 30.0
+LeftLegHp = 30.0
+RightLegHp = 30.0
+metadata/_custom_type_script = "uid://bx0lje6dfo56y"

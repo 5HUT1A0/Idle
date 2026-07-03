@@ -4,4 +4,6 @@
 
 [resource]
 script = ExtResource("1_dxteo")
+EnemyId = "scav_01"
+DisplayName = "scav_01"
 metadata/_custom_type_script = "uid://bx0lje6dfo56y"

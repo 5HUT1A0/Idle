@@ -28,7 +28,7 @@ public partial class EventBus : Node
 	[Signal]
 	public delegate void BodyPartDisabledEventHandler(string partId);
 	[Signal]
-	public delegate void BodyStateCriticalEventHandler(string statType);
+	public delegate void BodyStateCriticalEventHandler(string stateType);
 	[Signal]
 	public delegate void EnemyKilledEventHandler(string enemyId, string lootSummaryJson);
 	[Signal]

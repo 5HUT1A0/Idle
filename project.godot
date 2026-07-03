@@ -23,6 +23,7 @@ SaveManager="*uid://8it43xnqnq13"
 ConfigManager="*uid://bgpd6i8shhmet"
 DataManager="*uid://mxlla3y444eg"
 GameState="*uid://t2ub3l8t2a8k"
+CombatManager="*uid://rnvp0ro1k5sg"
 
 [dotnet]
 
