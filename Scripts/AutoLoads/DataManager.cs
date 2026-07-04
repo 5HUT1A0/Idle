@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 
 /// <summary>
@@ -67,17 +68,48 @@ public partial class DataManager : Node
 	public float HpRightLeg { get; set; } = 100f;
 
 	//=================================================
+	//仓库物品
+	//=================================================
+	private List<InventorySlot> _inventory = new();
+	public List<InventorySlot> Inventory => _inventory;
+	private int _nextSlotId = 1; // 内存中唯一标识槽位的自增ID，存档时不写入
+
+	public void AddInventorySlot(InventorySlot slot)
+	{
+		slot.SlotId = _nextSlotId++;
+		_inventory.Add(slot);
+		MarkDirty("inventory_version", DateTime.UtcNow.Ticks.ToString());
+	}
+
+	public void RemoveInventorySlot(int slotId)
+	{
+		_inventory.RemoveAll(s => s.SlotId == slotId);
+		MarkDirty("inventory_version", DateTime.UtcNow.Ticks.ToString());
+	}
+
+	//=================================================
 	//生命周期
 	//=================================================
 	public override void _Ready()
 	{
 		Instance = this;
 
+
 		// 从 SaveManager 取回存档数据（如果存在）
 		var savedState = SaveManager.Instance.TakeLoadedState();
 		if (savedState != null)
 		{
 			LoadState(savedState);
+		}
+
+		var savedInv = SaveManager.Instance.TakeLoadedInventory();
+		if (savedInv != null && savedInv.Count > 0)
+		{
+			SetInventory(savedInv);
+		}
+		else
+		{
+			InventorySystem.InitDefultItems();  //新档，送
 		}
 
 		GD.Print($"[DataManager] 就绪 | 废土币:{_scrapCurrency} 饥饿:{_hunger} 口渴:{_thirst}");
@@ -105,7 +137,15 @@ public partial class DataManager : Node
 		HpRightLeg = GetFloat(state, "hp_right_leg", 100f);
 
 		GD.Print($"[DataManager] 存档数据已加载 | 废土币:{_scrapCurrency}");
+		//库存由SaveManager加载 → SetInventory()
 
+	}
+
+	/// <summary>SaveManager 加载库存后调用</summary>
+	public void SetInventory(List<InventorySlot> slots)
+	{
+		_inventory = slots;
+		_nextSlotId = slots.Count > 0 ? slots.Max(s => s.SlotId) + 1 : 1;
 	}
 
 	/// <summary>

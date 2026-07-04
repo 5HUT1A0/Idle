@@ -28,7 +28,13 @@ public partial class GameManager : Node
 			IsFocused = true;
 			EventBus.Instance.EmitSignal(EventBus.SignalName.FocusChanged, true);
 		}
+		if (what == NotificationWMCloseRequest)
+		{
+			GD.Print("[SaveManager] 检测到窗口关闭，执行退出存档...");
+			SaveManager.RequestSave();
+		}
 	}
+
 
 	//唯一状态切换接口
 	public void Transition(GameState newState)

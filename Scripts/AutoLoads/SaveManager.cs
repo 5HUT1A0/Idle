@@ -17,6 +17,7 @@ public partial class SaveManager : Node
 	private const int CurrentVersion = 1;
 	private const int MaxBackupCount = 3;
 	private Dictionary<string, string> _loadedState;  // 启动时加载的状态缓存
+	private List<InventorySlot> _loadedInventory;
 
 	/// <summary>供 DataManager._Ready() 取走加载的状态。取后清空。</summary>
 	public Dictionary<string, string> TakeLoadedState()
@@ -24,6 +25,13 @@ public partial class SaveManager : Node
 		var state = _loadedState;
 		_loadedState = null;
 		return state;
+	}
+
+	public List<InventorySlot> TakeLoadedInventory()
+	{
+		var inventory = _loadedInventory;
+		_loadedInventory = null;
+		return inventory;
 	}
 
 	private string _savePath;
@@ -45,7 +53,8 @@ public partial class SaveManager : Node
 			try
 			{
 				_loadedState = LoadSave();
-				GD.Print($"[SaveManager]存档已加载：{_savePath}");
+				GD.Print($"[SaveManager] 存档路径: {_savePath}");
+				GD.Print($"[SaveManager] 加载行数: inventory={_loadedInventory?.Count ?? 0}, state={_loadedState?.Count ?? 0}");
 			}
 			catch (Exception ex)
 			{
@@ -204,7 +213,26 @@ public partial class SaveManager : Node
 		}
 		reader.Close();
 
-		//DataManager 应为 AutoLoad优先级4，此时已_Ready()，可以直接调用
+		//库存加载
+		var inventortSlots = new List<InventorySlot>();
+		using (var invCmd = new SqliteCommand("SELECT slot_id, item_id, quantity, durability, location FROM inventory", db))
+
+		using (var invReader = invCmd.ExecuteReader())
+		{
+			while (invReader.Read())
+			{
+				inventortSlots.Add(new InventorySlot
+				{
+					SlotId = invReader.GetInt32(0),
+					ItemId = invReader.GetString(1),
+					Quantity = invReader.GetInt32(2),
+					Durability = invReader.IsDBNull(3) ? 100f : invReader.GetFloat(3),
+					Location = invReader.IsDBNull(4) ? "stash" : invReader.GetString(4)
+				});
+			}
+		}
+		_loadedInventory = inventortSlots; //DataManager 会在 _Ready() 时取走
+										   //DataManager 应为 AutoLoad优先级4，此时已_Ready()，可以直接调用
 		return state;
 	}
 
@@ -244,6 +272,29 @@ public partial class SaveManager : Node
 				cmd.ExecuteNonQuery();
 			}
 
+
+
+			//库存全量覆写（清旧+插新）
+			GD.Print($"[SaveManager] DoFlush 开始 | 内存库存: {DataManager.Instance.Inventory.Count}件 | dirty: {DataManager.Instance.IsDirty}");
+			using (var delCmd = new SqliteCommand("DELETE FROM inventory", db, tx))
+			{
+				delCmd.ExecuteNonQuery();
+			}
+
+			foreach (var slot in DataManager.Instance.Inventory)
+			{
+				GD.Print($"[SaveManager] 写入库存 slot={slot.SlotId} item={slot.ItemId} qty={slot.Quantity}");
+				using var insCmd = new SqliteCommand(
+					@"INSERT INTO inventory (slot_id, item_id, quantity, durability, location)
+                     VALUES (@id, @item, @qty, @dur, @loc)", db, tx);
+				insCmd.Parameters.AddWithValue("@id", slot.SlotId);
+				insCmd.Parameters.AddWithValue("@item", slot.ItemId);
+				insCmd.Parameters.AddWithValue("@qty", slot.Quantity);
+				insCmd.Parameters.AddWithValue("@dur", slot.Durability);
+				insCmd.Parameters.AddWithValue("@loc", slot.Location);
+				insCmd.ExecuteNonQuery();
+			}
+
 			//更新 元数据
 			var hash = ComputeHash(db);
 			using var metaCmd = new SqliteCommand(
@@ -252,6 +303,7 @@ public partial class SaveManager : Node
 			metaCmd.Parameters.AddWithValue("@hash", hash);
 			metaCmd.ExecuteNonQuery();
 
+			GD.Print($"[SaveManager] 库存写入完成，即将 commit");
 			tx.Commit();
 			_flushScheduled = false;
 
@@ -273,19 +325,22 @@ public partial class SaveManager : Node
 
 	private string ComputeHash(SqliteConnection db)
 	{
-		//简易哈希：对 player_state 全表内容做 SHA256
-		using var cmd = new SqliteCommand("SELECT key, value FROM player_state ORDER BY key", db);
-		using var reader = cmd.ExecuteReader();
-		var sb = new StringBuilder();
-
-		while (reader.Read())
+		try
 		{
-			sb.Append(reader.GetString(0)).Append("=").Append(reader.GetString(1)).Append("\n");
+			using var cmd = new SqliteCommand("SELECT key, value FROM player_state ORDER BY key", db);
+			using var reader = cmd.ExecuteReader();
+			var sb = new StringBuilder();
+			while (reader.Read())
+				sb.Append(reader.GetString(0)).Append('=').Append(reader.GetString(1)).Append('\n');
+			reader.Close();
+			var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+			return Convert.ToHexString(bytes);
 		}
-		reader.Close();
-
-		var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
-		return Convert.ToHexString(bytes);
+		catch (Exception e)
+		{
+			GD.PushError($"[SaveManager] ComputeHash 失败: {e.Message}");
+			return "error";
+		}
 	}
 
 	private void RotateBackups()
