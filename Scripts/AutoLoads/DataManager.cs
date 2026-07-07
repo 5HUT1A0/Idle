@@ -74,6 +74,10 @@ public partial class DataManager : Node
 	public List<InventorySlot> Inventory => _inventory;
 	private int _nextSlotId = 1; // 内存中唯一标识槽位的自增ID，存档时不写入
 
+	private List<CustomGun> _customGuns = new();
+	public List<CustomGun> CustomGuns => _customGuns;
+	private int _nextGunId = 1; // 内存中唯一标识枪械的自增ID，存档时不写入
+
 	public void AddInventorySlot(InventorySlot slot)
 	{
 		slot.SlotId = _nextSlotId++;
@@ -85,6 +89,30 @@ public partial class DataManager : Node
 	{
 		_inventory.RemoveAll(s => s.SlotId == slotId);
 		MarkDirty("inventory_version", DateTime.UtcNow.Ticks.ToString());
+	}
+
+	/// <summary>SaveManager 加载库存后调用</summary>
+	public void SetInventory(List<InventorySlot> slots)
+	{
+		_inventory = slots;
+		_nextSlotId = slots.Count > 0 ? slots.Max(s => s.SlotId) + 1 : 1;
+	}
+
+	public void AddCustomGun(CustomGun gun)
+	{
+		gun.GunId = _nextGunId++;
+		_customGuns.Add(gun);
+	}
+
+	public void RemoveCustomGun(int gunId)
+	{
+		_customGuns.RemoveAll(g => g.GunId == gunId);
+	}
+
+	public void SetCustomGuns(List<CustomGun> guns)
+	{
+		_customGuns = guns;
+		_nextGunId = guns.Count > 0 ? guns.Max(g => g.GunId) + 1 : 1;
 	}
 
 	//=================================================
@@ -111,6 +139,54 @@ public partial class DataManager : Node
 		{
 			InventorySystem.InitDefultItems();  //新档，送
 		}
+
+		// ═══ 验证 CustomGunSystem ═══
+		GD.Print("═══ CustomGunSystem 验证开始 ═══");
+
+		// 1. 查库存
+		var bodySlots = InventorySystem.FindSlots("body_ar_t1");
+		GD.Print($"枪身库存: {bodySlots.Count}件");
+
+		var barrelSlots = InventorySystem.FindSlots("barrel_ar_standard_t1");
+		GD.Print($"枪管库存: {barrelSlots.Count}件");
+
+		var magSlots = InventorySystem.FindSlots("mag_ar_standard_t1");
+		GD.Print($"弹匣库存: {magSlots.Count}件");
+
+		// 2. 组装
+		if (bodySlots.Count > 0 && barrelSlots.Count > 0 && magSlots.Count > 0)
+		{
+			var gun = CustomGunSystem.TryAssemble(
+				"body_ar_t1", "barrel_ar_standard_t1", "mag_ar_standard_t1",
+				gunName: "验证用AR");
+
+			if (gun != null)
+			{
+				GD.Print($"✅ 组装成功: {gun.GunName} (ID={gun.GunId})");
+
+				// 3. 查枪库
+				var allGuns = CustomGunSystem.GetAllGun();
+				GD.Print($"枪库数量: {allGuns.Count}");
+
+				// 4. 验库存扣减
+				GD.Print($"组装后枪身库存: {InventorySystem.FindSlots("body_ar_t1").Count}件 (应为0)");
+
+				// 5. 拆卸
+				CustomGunSystem.Disassemble(gun.GunId);
+				GD.Print($"拆卸后枪身库存: {InventorySystem.FindSlots("body_ar_t1").Count}件 (应为1)");
+				GD.Print($"拆卸后枪库: {CustomGunSystem.GetAllGun().Count}把 (应为0)");
+			}
+			else
+			{
+				GD.Print("❌ 组装失败");
+			}
+		}
+		else
+		{
+			GD.Print("❌ 库存不足，无法验证组装");
+		}
+
+		GD.Print("═══ CustomGunSystem 验证结束 ═══");
 
 		GD.Print($"[DataManager] 就绪 | 废土币:{_scrapCurrency} 饥饿:{_hunger} 口渴:{_thirst}");
 	}
@@ -141,12 +217,7 @@ public partial class DataManager : Node
 
 	}
 
-	/// <summary>SaveManager 加载库存后调用</summary>
-	public void SetInventory(List<InventorySlot> slots)
-	{
-		_inventory = slots;
-		_nextSlotId = slots.Count > 0 ? slots.Max(s => s.SlotId) + 1 : 1;
-	}
+
 
 	/// <summary>
 	/// SaveManager.DoFlush() 调用，收集所有脏数据批量写入。

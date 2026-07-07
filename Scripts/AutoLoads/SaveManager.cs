@@ -280,10 +280,8 @@ public partial class SaveManager : Node
 			{
 				delCmd.ExecuteNonQuery();
 			}
-
 			foreach (var slot in DataManager.Instance.Inventory)
 			{
-				GD.Print($"[SaveManager] 写入库存 slot={slot.SlotId} item={slot.ItemId} qty={slot.Quantity}");
 				using var insCmd = new SqliteCommand(
 					@"INSERT INTO inventory (slot_id, item_id, quantity, durability, location)
                      VALUES (@id, @item, @qty, @dur, @loc)", db, tx);
@@ -295,17 +293,37 @@ public partial class SaveManager : Node
 				insCmd.ExecuteNonQuery();
 			}
 
-			//更新 元数据
-			var hash = ComputeHash(db);
-			using var metaCmd = new SqliteCommand(
-				 "UPDATE save_meta SET last_close = @now, hash = @hash WHERE id = 1", db, tx);
-			metaCmd.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
-			metaCmd.Parameters.AddWithValue("@hash", hash);
-			metaCmd.ExecuteNonQuery();
+			foreach (var gun in DataManager.Instance.CustomGuns)
+			{
+				GD.Print($"[SaveManager] 写入枪械: {gun.GunName} | ID: {gun.GunId}| 配件: {gun.BodyId}, {gun.BarrelId}, {gun.MagazineId}, {gun.SightId}, {gun.MuzzleId} | 耐久: {gun.Durability}");
+				using var insCmd = new SqliteCommand(
+					@"INSERT INTO custom_guns (gun_id, gun_name, body_id, barrel_id, magazine_id, sight_id, muzzle_id, durability, insured_by)
+					 VALUES (@id, @name, @body, @barrel, @magazine, @sight, @muzzle, @durability, @insured)", db, tx);
+				insCmd.Parameters.AddWithValue("@id", gun.GunId);
+				insCmd.Parameters.AddWithValue("@name", gun.GunName);
+				insCmd.Parameters.AddWithValue("@body", gun.BodyId);
+				insCmd.Parameters.AddWithValue("@barrel", gun.BarrelId);
+				insCmd.Parameters.AddWithValue("@magazine", gun.MagazineId);
+				insCmd.Parameters.AddWithValue("@sight", gun.SightId);
+				insCmd.Parameters.AddWithValue("@muzzle", gun.MuzzleId);
+				insCmd.Parameters.AddWithValue("@durability", gun.Durability);
+				insCmd.Parameters.AddWithValue("@insured", gun.InsuredBy);
+				insCmd.ExecuteNonQuery();
+			}
+
 
 			GD.Print($"[SaveManager] 库存写入完成，即将 commit");
 			tx.Commit();
 			_flushScheduled = false;
+
+
+			//更新 元数据
+			var hash = ComputeHash(db);
+			using var metaCmd = new SqliteCommand(
+				 "UPDATE save_meta SET last_close = @now, hash = @hash WHERE id = 1", db);
+			metaCmd.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
+			metaCmd.Parameters.AddWithValue("@hash", hash);
+			metaCmd.ExecuteNonQuery();
 
 			RotateBackups();
 			EventBus.Instance.EmitSignal(EventBus.SignalName.SaveCompleted);
@@ -325,23 +343,22 @@ public partial class SaveManager : Node
 
 	private string ComputeHash(SqliteConnection db)
 	{
-		try
+		//简易哈希：对 player_state 全表内容做 SHA256
+		using var cmd = new SqliteCommand("SELECT key, value FROM player_state ORDER BY key", db);
+		using var reader = cmd.ExecuteReader();
+		var sb = new StringBuilder();
+
+		while (reader.Read())
 		{
-			using var cmd = new SqliteCommand("SELECT key, value FROM player_state ORDER BY key", db);
-			using var reader = cmd.ExecuteReader();
-			var sb = new StringBuilder();
-			while (reader.Read())
-				sb.Append(reader.GetString(0)).Append('=').Append(reader.GetString(1)).Append('\n');
-			reader.Close();
-			var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
-			return Convert.ToHexString(bytes);
+			sb.Append(reader.GetString(0)).Append("=").Append(reader.GetString(1)).Append("\n");
 		}
-		catch (Exception e)
-		{
-			GD.PushError($"[SaveManager] ComputeHash 失败: {e.Message}");
-			return "error";
-		}
+		reader.Close();
+
+		var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+		return Convert.ToHexString(bytes);
 	}
+
+
 
 	private void RotateBackups()
 	{

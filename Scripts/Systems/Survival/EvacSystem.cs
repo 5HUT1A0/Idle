@@ -27,9 +27,7 @@ public static class EvacSystem
 		if (ammoLeft <= 0)
 			return EvacReason.OutOfAmmo;
 
-		if (player.Armor.IsCovered(BodyPart.Head) && DataManager.Instance.HpHead <= 0) //破甲且血量归零
-			return EvacReason.HpTooLow;
-		if (player.Armor.IsCovered(BodyPart.Chest) && DataManager.Instance.HpChest <= 0)
+		if (DataManager.Instance.HpHead <= 0 || DataManager.Instance.HpChest <= 0 || DataManager.Instance.HpAbdomen <= 0)
 			return EvacReason.HpTooLow;
 
 		if (DataManager.Instance.Hunger <= 0f || DataManager.Instance.Thirst <= 0f)
