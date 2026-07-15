@@ -78,6 +78,10 @@ public partial class DataManager : Node
 	public List<CustomGun> CustomGuns => _customGuns;
 	private int _nextGunId = 1; // 内存中唯一标识枪械的自增ID，存档时不写入
 
+	private List<CustomArmor> _customArmors = new();
+	public List<CustomArmor> CustomArmors => _customArmors;
+	private int _nextArmorId = 1;
+
 	public void AddInventorySlot(InventorySlot slot)
 	{
 		slot.SlotId = _nextSlotId++;
@@ -115,6 +119,25 @@ public partial class DataManager : Node
 		_nextGunId = guns.Count > 0 ? guns.Max(g => g.GunId) + 1 : 1;
 	}
 
+	public void AddCustomArmor(CustomArmor armor)
+	{
+		armor.ArmorId = _nextArmorId++;
+		_customArmors.Add(armor);
+		MarkDirty("custom_armor_version", DateTime.UtcNow.Ticks.ToString());
+	}
+
+	public void RemoveCustomArmor(int armorId)
+	{
+		_customArmors.RemoveAll(a => a.ArmorId == armorId);
+		MarkDirty("custom_armor_version", DateTime.UtcNow.Ticks.ToString());
+	}
+
+	public void SetCustomArmors(List<CustomArmor> armors)
+	{
+		_customArmors = armors;
+		_nextArmorId = armors.Count > 0 ? armors.Max(a => a.ArmorId) + 1 : 1;
+	}
+
 	//=================================================
 	//生命周期
 	//=================================================
@@ -137,7 +160,7 @@ public partial class DataManager : Node
 		}
 		else
 		{
-			InventorySystem.InitDefultItems();  //新档，送
+			InventorySystem.InitDefaultItems();  //新档，送
 		}
 
 		// ═══ 验证 CustomGunSystem ═══
@@ -165,7 +188,7 @@ public partial class DataManager : Node
 				GD.Print($"✅ 组装成功: {gun.GunName} (ID={gun.GunId})");
 
 				// 3. 查枪库
-				var allGuns = CustomGunSystem.GetAllGun();
+				var allGuns = CustomGunSystem.GetAllGuns();
 				GD.Print($"枪库数量: {allGuns.Count}");
 
 				// 4. 验库存扣减
@@ -174,7 +197,7 @@ public partial class DataManager : Node
 				// 5. 拆卸
 				CustomGunSystem.Disassemble(gun.GunId);
 				GD.Print($"拆卸后枪身库存: {InventorySystem.FindSlots("body_ar_t1").Count}件 (应为1)");
-				GD.Print($"拆卸后枪库: {CustomGunSystem.GetAllGun().Count}把 (应为0)");
+				GD.Print($"拆卸后枪库: {CustomGunSystem.GetAllGuns().Count}把 (应为0)");
 			}
 			else
 			{
@@ -187,6 +210,62 @@ public partial class DataManager : Node
 		}
 
 		GD.Print("═══ CustomGunSystem 验证结束 ═══");
+
+		// ═══ 验证 ArmorSystem ═══
+		GD.Print("═══ ArmorSystem 验证开始 ═══");
+
+		// 1. 手动加测试物品（模拟 InitDefaultItems）
+		InventorySystem.AddItem("liner_chestrig_t1", 1);
+		InventorySystem.AddItem("plate_lighthard_t1", 2);
+		GD.Print($"内衬库存: {InventorySystem.FindSlots("liner_chestrig_t1").Count}件 (应为1)");
+		GD.Print($"挡板库存: {InventorySystem.FindSlots("plate_lighthard_t1").Count}件 (应为2)");
+
+		// 2. 创建护甲
+		var armor = ArmorSystem.CreateArmor("liner_chestrig_t1", "测试胸挂");
+		if (armor != null)
+		{
+			GD.Print($"✅ 护甲创建成功: {armor.ArmorName} (ID={armor.ArmorId})");
+			GD.Print($"创建后内衬库存: {InventorySystem.FindSlots("liner_chestrig_t1").Count}件 (应为0)");
+
+			// 3. 挂前板
+			bool ok = ArmorSystem.EquipPlate(armor.ArmorId, "plate_lighthard_t1", "front");
+			GD.Print($"{(ok ? "✅" : "❌")} 挂前板 {(ok ? "成功" : "失败")}");
+
+			// 4. 重复挂同一槽位——应失败
+			bool dup = ArmorSystem.EquipPlate(armor.ArmorId, "plate_lighthard_t1", "front");
+			GD.Print($"{(dup ? "❌ 不应成功" : "✅")} 重复挂板正确拒绝");
+
+			// 5. 挂不存在的槽位——应失败
+			bool badSlot = ArmorSystem.EquipPlate(armor.ArmorId, "plate_lighthard_t1", "rear");
+			GD.Print($"{(badSlot ? "❌ 不应成功" : "✅")} 无后板槽正确拒绝");
+
+			// 6. 查看护甲库
+			GD.Print($"护甲库数量: {ArmorSystem.GetAllArmors().Count} (应为1)");
+
+			// 7. GetSummary
+			var summary = ArmorSystem.GetSummary(armor);
+			GD.Print($"胸部覆盖: {summary.ChestCovered} (应为True)");
+			GD.Print($"胸部减伤: {summary.ChestReduction} (应为0.2)");
+			GD.Print($"头部覆盖: {summary.HeadCovered} (应为False)");
+			GD.Print($"腹部覆盖: {summary.AbdomenCovered} (应为False，轻型胸挂不覆腹)");
+
+			// 8. 卸下挡板
+			ArmorSystem.UnequipPlate(armor.ArmorId, "front");
+			GD.Print($"卸板后挡板库存: {InventorySystem.FindSlots("plate_lighthard_t1").Count}件(应为2，退回)");
+
+			// 9. 拆卸护甲
+			ArmorSystem.Disassemble(armor.ArmorId);
+			GD.Print($"拆卸后内衬库存: {InventorySystem.FindSlots("liner_chestrig_t1").Count}件(应为1，退回)");
+
+
+			GD.Print($"拆卸后护甲库: {ArmorSystem.GetAllArmors().Count} (应为0)");
+		}
+		else
+		{
+			GD.Print("❌ 护甲创建失败");
+		}
+
+		GD.Print("═══ ArmorSystem 验证结束 ═══");
 
 		GD.Print($"[DataManager] 就绪 | 废土币:{_scrapCurrency} 饥饿:{_hunger} 口渴:{_thirst}");
 	}

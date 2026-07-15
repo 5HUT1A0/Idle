@@ -25,7 +25,7 @@ public static class WeightSystem
 		}
 		else
 		{
-			return new WeightResult(WeightTier.Heavy, 0.10f, 0.6f, 1.5f);
+			return new WeightResult(WeightTier.Heavy, 0.10f, 0.6f, 0.15f);
 		}
 	}
 

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="PlateData" format=3 uid="uid://dbyyr210sc4xu"]
+
+[ext_resource type="Script" uid="uid://cf4qf67guimud" path="res://Data/PlateData.cs" id="1_lurf1"]
+
+[resource]
+script = ExtResource("1_lurf1")
+DodgePenalty = 0.02
+ItemId = "plate_lighthard_t1"
+DisplayName = "轻型硬质挡板 T1"
+MaxStack = 1
+BaseValue = 500
+metadata/_custom_type_script = "uid://cf4qf67guimud"

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="LinerData" format=3 uid="uid://bbecidvlom4ek"]
+
+[ext_resource type="Script" uid="uid://ck5xk8seb7v6m" path="res://Data/LinerData.cs" id="1_t68uf"]
+
+[resource]
+script = ExtResource("1_t68uf")
+HasFrontSlot = true
+BaseChestDefense = 0.05
+BaseDodgeValue = 0.05
+ItemId = "liner_chestrig_t1"
+DisplayName = "轻型胸挂 T1"
+MaxStack = 1
+BaseValue = 300
+metadata/_custom_type_script = "uid://ck5xk8seb7v6m"

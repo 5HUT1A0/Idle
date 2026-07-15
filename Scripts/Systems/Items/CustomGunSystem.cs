@@ -19,7 +19,7 @@ public static class CustomGunSystem
 	// ═══════════════════════════════════════════════
 
 	/// <summary>获取玩家所有已组装的枪</summary>
-	public static List<CustomGun> GetAllGun() => DataManager.Instance.CustomGuns;
+	public static List<CustomGun> GetAllGuns() => DataManager.Instance.CustomGuns;
 
 	/// <summary>获取玩家已组装的枪，按 GunId 排序</summary>
 	public static CustomGun GetGun(int gunId) => DataManager.Instance.CustomGuns.Find(g => g.GunId == gunId);

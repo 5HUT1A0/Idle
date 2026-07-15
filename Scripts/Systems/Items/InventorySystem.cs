@@ -146,7 +146,7 @@ public static class InventorySystem
 		return true;
 	}
 
-	public static void InitDefultItems()
+	public static void InitDefaultItems()
 	{
 		AddItem("body_ar_t1", 1);
 		AddItem("barrel_ar_standard_t1", 1);

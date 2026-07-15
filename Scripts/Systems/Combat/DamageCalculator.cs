@@ -40,7 +40,8 @@ public static class DamageCalculator
 
 		if (total <= 0f)
 		{
-			total = 50f; // 兜底，中距离
+			// 所有权重为零时返回中档距离（80m），作为安全回退
+			return 80f + (GD.Randf() - 0.5f) * 20f;
 		}
 
 		float roll = GD.Randf() * total;

@@ -62,6 +62,12 @@ public partial class ConfigManager : Node
 		// 地图距离分布
 		LoadIndex("res://Data/Config/Maps/ConfigIndex.tres", (MapDistanceConfig map) =>
 		_mapDb[map.MapId] = map);
+
+		//护甲配件
+		LoadIndex("res://Data/Config/Armors/ConfigIndex.tres", (BaseItemData armor) =>
+		{
+			_itemDb[armor.ItemId] = armor;
+		});
 	}
 
 	/// <summary>

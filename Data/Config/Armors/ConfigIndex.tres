@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="ConfigIndex" format=3 uid="uid://610chjfog8t4"]
+
+[ext_resource type="Resource" uid="uid://bbecidvlom4ek" path="res://Data/Config/Armors/liner_chestrig_t1.tres" id="1_0qrhi"]
+[ext_resource type="Script" uid="uid://c3k0lmtaw0rv" path="res://Data/ConfigIndex.cs" id="1_713na"]
+[ext_resource type="Resource" uid="uid://dbyyr210sc4xu" path="res://Data/Config/Armors/plate_lighthard_t1.tres" id="2_58eb6"]
+
+[resource]
+script = ExtResource("1_713na")
+Entries = Array[Resource]([ExtResource("1_0qrhi"), ExtResource("2_58eb6")])
+metadata/_custom_type_script = "uid://c3k0lmtaw0rv"

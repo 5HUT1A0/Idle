@@ -116,15 +116,16 @@ public partial class SaveManager : Node
 		);
 
 		CREATE TABLE IF NOT EXISTS custom_armors (
-			armor_id        INTEGER PRIMARY KEY AUTOINCREMENT,
-			helmet_id       TEXT,
+			armor_id        INTEGER PRIMARY KEY,
 			liner_id        TEXT NOT NULL,
+			helmet_id       TEXT,
 			front_plate_id  TEXT,
 			rear_plate_id   TEXT,
 			left_plate_id   TEXT,
 			right_plate_id  TEXT,
-			durability_json TEXT,
-			insured_by      TEXT
+			durability      REAL DEFAULT 100.0,
+			insured_by      TEXT,
+			armor_name      TEXT
 		);
 
 		CREATE TABLE IF NOT EXISTS progress (
@@ -309,6 +310,28 @@ public partial class SaveManager : Node
 				insCmd.Parameters.AddWithValue("@durability", gun.Durability);
 				insCmd.Parameters.AddWithValue("@insured", gun.InsuredBy);
 				insCmd.ExecuteNonQuery();
+			}
+
+			//custom_armors表
+			foreach (var armor in DataManager.Instance.CustomArmors)
+			{
+				using var ins = new SqliteCommand(
+					@"INSERT INTO custom_armors (armor_id, liner_id, helmet_id,
+						front_plate_id, rear_plate_id, left_plate_id, right_plate_id,
+						durability, insured_by, armor_name)
+						VALUES (@id, @liner, @helmet, @front, @rear, @left, @right,
+						@dur, @insured, @name)", db, tx);
+				ins.Parameters.AddWithValue("@id", armor.ArmorId);
+				ins.Parameters.AddWithValue("@liner", armor.LinerId);
+				ins.Parameters.AddWithValue("@helmet", (object)armor.HelmetId ?? DBNull.Value);
+				ins.Parameters.AddWithValue("@front", (object)armor.FrontPlateId ?? DBNull.Value);
+				ins.Parameters.AddWithValue("@rear", (object)armor.RearPlateId ?? DBNull.Value);
+				ins.Parameters.AddWithValue("@left", (object)armor.LeftPlateId ?? DBNull.Value);
+				ins.Parameters.AddWithValue("@right", (object)armor.RightPlateId ?? DBNull.Value);
+				ins.Parameters.AddWithValue("@dur", armor.Durability);
+				ins.Parameters.AddWithValue("@insured", (object)armor.InsuredBy ?? DBNull.Value);
+				ins.Parameters.AddWithValue("@name", armor.ArmorName ?? "");
+				ins.ExecuteNonQuery();
 			}
 
 
