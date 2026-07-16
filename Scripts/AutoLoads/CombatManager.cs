@@ -19,6 +19,7 @@ public partial class CombatManager : Node
 	private int _ammoLeft;
 	private float _elapsedHours;
 	private float _mapTimeLimitHours = 2f; //默认 2 小时
+	private float _gunDurability = 100f; //默认满耐久
 
 	private const double TickInterval = 3.0; //每秒结算一次
 
@@ -74,12 +75,17 @@ public partial class CombatManager : Node
 		_currentMapId = "map_factory";
 		_ammoLeft = 180;
 
+		_gunDurability = 100f;  // MVP 默认满耐久
+
 		GD.Print($"[CombatManager] Raid开始|地图 {_currentMapId} 弹药： {_ammoLeft} .");
 	}
 
 	private void EndRaid()
 	{
 		_isInRaid = false;
+		//撤离时统一结算耐久消耗
+		DurabilitySystem.OnRaidEnd(_elapsedHours);
+
 		GD.Print($"[CombatManager] Raid结束|耗时 {_elapsedHours} 小时,剩余弹药 {_ammoLeft} .");
 	}
 
@@ -131,6 +137,15 @@ public partial class CombatManager : Node
 			_ammoLeft = 0;
 		}
 
+		// 耐久故障判定——故障时跳过本轮攻击
+		var durEffects = DurabilitySystem.CalcEffects(_gunDurability);
+		if (DurabilitySystem.RollMalfunction(durEffects.MalfunctionChance))
+		{
+			AppendCombatLog($"[color=darkgray]⚠ 卡壳！({durEffects.TierLabel})[/color]");
+			CheckEvacAndBody();
+			return;
+		}
+
 		//1、接敌距离
 		var map = ConfigManager.Instance.GetConfig<MapDistanceConfig>(_currentMapId);
 		float dist = map != null ? DamageCalculator.RollEngagementDistance(map) : 50f;
@@ -149,7 +164,8 @@ public partial class CombatManager : Node
 
 		//3、命中判定
 		var weight = WeightSystem.CalcTierMvp(_player.TotalWeight);
-		float hitChance = DamageCalculator.CalcHitChance(_player, weight.HitPenalty, rangeCorr);
+		float hitChance = DamageCalculator.CalcHitChance(_player, weight.HitPenalty, rangeCorr) - durEffects.AccuracyPenalty;  // 耐久精度惩罚
+		hitChance = Mathf.Clamp(hitChance, 0.05f, 0.95f);
 		bool isHit = DamageCalculator.RollHit(hitChance);
 
 		if (!isHit)

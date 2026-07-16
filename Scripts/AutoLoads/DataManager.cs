@@ -163,111 +163,60 @@ public partial class DataManager : Node
 			InventorySystem.InitDefaultItems();  //新档，送
 		}
 
-		// ═══ 验证 CustomGunSystem ═══
-		GD.Print("═══ CustomGunSystem 验证开始 ═══");
+		GD.Print("═══ DurabilitySystem 验证开始 ═══");
 
-		// 1. 查库存
-		var bodySlots = InventorySystem.FindSlots("body_ar_t1");
-		GD.Print($"枪身库存: {bodySlots.Count}件");
+		// 1. 三档效果边界
+		GD.Print("── 耐久度 100% ──");
+		var e100 = DurabilitySystem.CalcEffects(100f);
+		GD.Print($"  精度惩罚: {e100.AccuracyPenalty} (应为0)");
+		GD.Print($"  故障率: {e100.MalfunctionChance} (应为0)");
+		GD.Print($"  报废: {e100.IsBroken} (应为False)");
+		GD.Print($"  档位: {e100.TierLabel} (应为良好)");
 
-		var barrelSlots = InventorySystem.FindSlots("barrel_ar_standard_t1");
-		GD.Print($"枪管库存: {barrelSlots.Count}件");
+		GD.Print("── 耐久度 70% ──");
+		var e70 = DurabilitySystem.CalcEffects(70f);
+		GD.Print($"  精度惩罚: {e70.AccuracyPenalty} (应为0)");
 
-		var magSlots = InventorySystem.FindSlots("mag_ar_standard_t1");
-		GD.Print($"弹匣库存: {magSlots.Count}件");
+		GD.Print("── 耐久度 69% ──");
+		var e69 = DurabilitySystem.CalcEffects(69f);
+		GD.Print($"  精度惩罚: {e69.AccuracyPenalty} (应为0.05)");
+		GD.Print($"  故障率: {e69.MalfunctionChance} (应为0.05)");
+		GD.Print($"  档位: {e69.TierLabel} (应为轻度磨损)");
 
-		// 2. 组装
-		if (bodySlots.Count > 0 && barrelSlots.Count > 0 && magSlots.Count > 0)
+		GD.Print("── 耐久度 30% ──");
+		var e30 = DurabilitySystem.CalcEffects(30f);
+		GD.Print($"  精度惩罚: {e30.AccuracyPenalty} (应为0)");
+
+		GD.Print("── 耐久度 29% ──");
+		var e29 = DurabilitySystem.CalcEffects(29f);
+		GD.Print($"  精度惩罚: {e29.AccuracyPenalty} (应为0.20)");
+		GD.Print($"  故障率: {e29.MalfunctionChance} (应为0.20)");
+		GD.Print($"  档位: {e29.TierLabel} (应为严重磨损)");
+
+		GD.Print("── 耐久度 0% ──");
+		var e0 = DurabilitySystem.CalcEffects(0f);
+		GD.Print($"  报废: {e0.IsBroken} (应为True)");
+		GD.Print($"  档位: {e0.TierLabel} (应为报废)");
+
+		// 2. 磨损计算
+		GD.Print("── 磨损计算 ──");
+		float wear1 = DurabilitySystem.CalcWear(1.5f, 1.0f);
+		GD.Print($"  1.5h 标准消耗: {wear1:F1} (应为1.5)");
+
+		float wear2 = DurabilitySystem.CalcWear(0.5f, 2.0f);
+		GD.Print($"  0.5h 双倍消耗: {wear2:F1} (应为1.0)");
+
+		// 3. 故障率批量统计（1000发）
+		GD.Print("── 故障率抽样（1000发，故障率10%）──");
+		int malfunctions = 0;
+		for (int i = 0; i < 1000; i++)
 		{
-			var gun = CustomGunSystem.TryAssemble(
-				"body_ar_t1", "barrel_ar_standard_t1", "mag_ar_standard_t1",
-				gunName: "验证用AR");
-
-			if (gun != null)
-			{
-				GD.Print($"✅ 组装成功: {gun.GunName} (ID={gun.GunId})");
-
-				// 3. 查枪库
-				var allGuns = CustomGunSystem.GetAllGuns();
-				GD.Print($"枪库数量: {allGuns.Count}");
-
-				// 4. 验库存扣减
-				GD.Print($"组装后枪身库存: {InventorySystem.FindSlots("body_ar_t1").Count}件 (应为0)");
-
-				// 5. 拆卸
-				CustomGunSystem.Disassemble(gun.GunId);
-				GD.Print($"拆卸后枪身库存: {InventorySystem.FindSlots("body_ar_t1").Count}件 (应为1)");
-				GD.Print($"拆卸后枪库: {CustomGunSystem.GetAllGuns().Count}把 (应为0)");
-			}
-			else
-			{
-				GD.Print("❌ 组装失败");
-			}
+			if (DurabilitySystem.RollMalfunction(0.10f))
+				malfunctions++;
 		}
-		else
-		{
-			GD.Print("❌ 库存不足，无法验证组装");
-		}
+		GD.Print($"  故障次数: {malfunctions}/1000 (期望 ~100)");
 
-		GD.Print("═══ CustomGunSystem 验证结束 ═══");
-
-		// ═══ 验证 ArmorSystem ═══
-		GD.Print("═══ ArmorSystem 验证开始 ═══");
-
-		// 1. 手动加测试物品（模拟 InitDefaultItems）
-		InventorySystem.AddItem("liner_chestrig_t1", 1);
-		InventorySystem.AddItem("plate_lighthard_t1", 2);
-		GD.Print($"内衬库存: {InventorySystem.FindSlots("liner_chestrig_t1").Count}件 (应为1)");
-		GD.Print($"挡板库存: {InventorySystem.FindSlots("plate_lighthard_t1").Count}件 (应为2)");
-
-		// 2. 创建护甲
-		var armor = ArmorSystem.CreateArmor("liner_chestrig_t1", "测试胸挂");
-		if (armor != null)
-		{
-			GD.Print($"✅ 护甲创建成功: {armor.ArmorName} (ID={armor.ArmorId})");
-			GD.Print($"创建后内衬库存: {InventorySystem.FindSlots("liner_chestrig_t1").Count}件 (应为0)");
-
-			// 3. 挂前板
-			bool ok = ArmorSystem.EquipPlate(armor.ArmorId, "plate_lighthard_t1", "front");
-			GD.Print($"{(ok ? "✅" : "❌")} 挂前板 {(ok ? "成功" : "失败")}");
-
-			// 4. 重复挂同一槽位——应失败
-			bool dup = ArmorSystem.EquipPlate(armor.ArmorId, "plate_lighthard_t1", "front");
-			GD.Print($"{(dup ? "❌ 不应成功" : "✅")} 重复挂板正确拒绝");
-
-			// 5. 挂不存在的槽位——应失败
-			bool badSlot = ArmorSystem.EquipPlate(armor.ArmorId, "plate_lighthard_t1", "rear");
-			GD.Print($"{(badSlot ? "❌ 不应成功" : "✅")} 无后板槽正确拒绝");
-
-			// 6. 查看护甲库
-			GD.Print($"护甲库数量: {ArmorSystem.GetAllArmors().Count} (应为1)");
-
-			// 7. GetSummary
-			var summary = ArmorSystem.GetSummary(armor);
-			GD.Print($"胸部覆盖: {summary.ChestCovered} (应为True)");
-			GD.Print($"胸部减伤: {summary.ChestReduction} (应为0.2)");
-			GD.Print($"头部覆盖: {summary.HeadCovered} (应为False)");
-			GD.Print($"腹部覆盖: {summary.AbdomenCovered} (应为False，轻型胸挂不覆腹)");
-
-			// 8. 卸下挡板
-			ArmorSystem.UnequipPlate(armor.ArmorId, "front");
-			GD.Print($"卸板后挡板库存: {InventorySystem.FindSlots("plate_lighthard_t1").Count}件(应为2，退回)");
-
-			// 9. 拆卸护甲
-			ArmorSystem.Disassemble(armor.ArmorId);
-			GD.Print($"拆卸后内衬库存: {InventorySystem.FindSlots("liner_chestrig_t1").Count}件(应为1，退回)");
-
-
-			GD.Print($"拆卸后护甲库: {ArmorSystem.GetAllArmors().Count} (应为0)");
-		}
-		else
-		{
-			GD.Print("❌ 护甲创建失败");
-		}
-
-		GD.Print("═══ ArmorSystem 验证结束 ═══");
-
-		GD.Print($"[DataManager] 就绪 | 废土币:{_scrapCurrency} 饥饿:{_hunger} 口渴:{_thirst}");
+		GD.Print("═══ DurabilitySystem 验证结束 ═══");
 	}
 
 	// ═══════════════════════════════════════════════
