@@ -138,6 +138,43 @@ public partial class DataManager : Node
 		_nextArmorId = armors.Count > 0 ? armors.Max(a => a.ArmorId) + 1 : 1;
 	}
 
+	// ═══════════════════════════════════════════════
+	// 设施等级（SafeHouseSystem 使用）
+	// ═══════════════════════════════════════════════
+
+	private Dictionary<string, int> _facilityLevels = new();
+	private Dictionary<string, float> _facilityUpgradeProgress = new();
+
+	public int GetFacilityLevel(string facilityId)
+	=> _facilityLevels.TryGetValue(facilityId, out var v) ? v : 0;
+
+	public void SetFacilityLevel(string facilityId, int level)
+	{
+		_facilityLevels[facilityId] = level;
+		MarkDirty($"facility_{facilityId}_level", level.ToString());
+	}
+
+	public bool HasFacilityLevel(string facilityId)
+	=> _facilityLevels.ContainsKey(facilityId);
+
+	public float GetFacilityUpgradeProgress(string facilityId)
+	=> _facilityUpgradeProgress.TryGetValue(facilityId, out var v) ? v : 0f;
+
+	public void SetFacilityUpgradeProgress(string facilityId, float progress)
+	{
+		_facilityUpgradeProgress[facilityId] = progress;
+		MarkDirty($"facility_{facilityId}_progress", progress.ToString("F2"));
+	}
+
+	public bool HasFacilityUpgradeProgress(string facilityId)
+	=> _facilityUpgradeProgress.ContainsKey(facilityId);
+
+	public void ClearFacilityUpgradeProgress(string facilityId)
+	{
+		_facilityUpgradeProgress.Remove(facilityId);
+		MarkDirty($"facility_{facilityId}_progress", "");
+	}
+
 	//=================================================
 	//生命周期
 	//=================================================
@@ -145,6 +182,7 @@ public partial class DataManager : Node
 	{
 		Instance = this;
 
+		SafeHouseSystem.Init();
 
 		// 从 SaveManager 取回存档数据（如果存在）
 		var savedState = SaveManager.Instance.TakeLoadedState();
@@ -163,60 +201,53 @@ public partial class DataManager : Node
 			InventorySystem.InitDefaultItems();  //新档，送
 		}
 
-		GD.Print("═══ DurabilitySystem 验证开始 ═══");
+		GD.Print("═══ SafeHouseSystem 验证开始 ═══");
 
-		// 1. 三档效果边界
-		GD.Print("── 耐久度 100% ──");
-		var e100 = DurabilitySystem.CalcEffects(100f);
-		GD.Print($"  精度惩罚: {e100.AccuracyPenalty} (应为0)");
-		GD.Print($"  故障率: {e100.MalfunctionChance} (应为0)");
-		GD.Print($"  报废: {e100.IsBroken} (应为False)");
-		GD.Print($"  档位: {e100.TierLabel} (应为良好)");
+		// 1. 初始等级
+		GD.Print($"仓库 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Warehouse)} (应为1)");
+		GD.Print($"工作台 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Workbench)} (应为1)");
+		GD.Print($"健身 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Gym)} (应为1)");
+		GD.Print($"靶场 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Range)} (应为1)");
+		GD.Print($"医务 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Infirmary)} (应为0)");
 
-		GD.Print("── 耐久度 70% ──");
-		var e70 = DurabilitySystem.CalcEffects(70f);
-		GD.Print($"  精度惩罚: {e70.AccuracyPenalty} (应为0)");
+		// 2. 解锁状态
+		GD.Print($"工作台已解锁: {SafeHouseSystem.IsUnlocked(SafeHouseSystem.Workbench)} (应为True)");
+		GD.Print($"医务室已解锁: {SafeHouseSystem.IsUnlocked(SafeHouseSystem.Infirmary)} (应为False)");
+		GD.Print($"医务室解锁提示: \"{SafeHouseSystem.GetUnlockHint(SafeHouseSystem.Infirmary)}\"");
 
-		GD.Print("── 耐久度 69% ──");
-		var e69 = DurabilitySystem.CalcEffects(69f);
-		GD.Print($"  精度惩罚: {e69.AccuracyPenalty} (应为0.05)");
-		GD.Print($"  故障率: {e69.MalfunctionChance} (应为0.05)");
-		GD.Print($"  档位: {e69.TierLabel} (应为轻度磨损)");
+		// 3. 升级工作台到 Lv2 → 解锁医务室
+		GD.Print("── 升级工作台到 Lv2 ──");
+		DataManager.Instance.SetFacilityLevel(SafeHouseSystem.Workbench, 2);
+		GD.Print($"工作台 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Workbench)}");
+		GD.Print($"医务室已解锁: {SafeHouseSystem.IsUnlocked(SafeHouseSystem.Infirmary)} (应为True)");
 
-		GD.Print("── 耐久度 30% ──");
-		var e30 = DurabilitySystem.CalcEffects(30f);
-		GD.Print($"  精度惩罚: {e30.AccuracyPenalty} (应为0)");
+		// 4. CanUpgrade
+		GD.Print($"工作台可升级: {SafeHouseSystem.CanUpgrade(SafeHouseSystem.Workbench)} (应为True)");
+		DataManager.Instance.SetFacilityLevel(SafeHouseSystem.Workbench, 10);
+		GD.Print($"工作台满级后可升级: {SafeHouseSystem.CanUpgrade(SafeHouseSystem.Workbench)} (应为False)");
 
-		GD.Print("── 耐久度 29% ──");
-		var e29 = DurabilitySystem.CalcEffects(29f);
-		GD.Print($"  精度惩罚: {e29.AccuracyPenalty} (应为0.20)");
-		GD.Print($"  故障率: {e29.MalfunctionChance} (应为0.20)");
-		GD.Print($"  档位: {e29.TierLabel} (应为严重磨损)");
+		// 5. 升级进度
+		GD.Print("── 升级进度 ──");
+		SafeHouseSystem.StartUpgrade(SafeHouseSystem.Gym);
+		GD.Print($"开始升级后进度: {SafeHouseSystem.GetUpgradeProgress(SafeHouseSystem.Gym):P0}");
+		SafeHouseSystem.AddProgress(SafeHouseSystem.Gym, 0.5f);
+		GD.Print($"推进0.5h后进度: {SafeHouseSystem.GetUpgradeProgress(SafeHouseSystem.Gym):P0}");
 
-		GD.Print("── 耐久度 0% ──");
-		var e0 = DurabilitySystem.CalcEffects(0f);
-		GD.Print($"  报废: {e0.IsBroken} (应为True)");
-		GD.Print($"  档位: {e0.TierLabel} (应为报废)");
 
-		// 2. 磨损计算
-		GD.Print("── 磨损计算 ──");
-		float wear1 = DurabilitySystem.CalcWear(1.5f, 1.0f);
-		GD.Print($"  1.5h 标准消耗: {wear1:F1} (应为1.5)");
+		// 6. 仓库容量
+		GD.Print($"仓库容量 Lv1: {SafeHouseSystem.GetWarehouseCapacity()}格 (应为30)");
+		DataManager.Instance.SetFacilityLevel(SafeHouseSystem.Warehouse, 3);
+		GD.Print($"仓库容量 Lv3: {SafeHouseSystem.GetWarehouseCapacity()}格 (应为48)");
 
-		float wear2 = DurabilitySystem.CalcWear(0.5f, 2.0f);
-		GD.Print($"  0.5h 双倍消耗: {wear2:F1} (应为1.0)");
+		// 7. 医务室回复
+		GD.Print("── 战后治疗 ──");
+		DataManager.Instance.HpHead = 60f;
+		DataManager.Instance.HpChest = 50f;
+		SafeHouseSystem.PostRaidHeal();
+		float healRate = SafeHouseSystem.GetInfirmaryHealRate();
+		GD.Print($"回复率: {healRate:P0} | 头部HP: {DataManager.Instance.HpHead:F0} (应为{60f + 100f * healRate:F0})");
 
-		// 3. 故障率批量统计（1000发）
-		GD.Print("── 故障率抽样（1000发，故障率10%）──");
-		int malfunctions = 0;
-		for (int i = 0; i < 1000; i++)
-		{
-			if (DurabilitySystem.RollMalfunction(0.10f))
-				malfunctions++;
-		}
-		GD.Print($"  故障次数: {malfunctions}/1000 (期望 ~100)");
-
-		GD.Print("═══ DurabilitySystem 验证结束 ═══");
+		GD.Print("═══ SafeHouseSystem 验证结束 ═══");
 	}
 
 	// ═══════════════════════════════════════════════
@@ -240,7 +271,30 @@ public partial class DataManager : Node
 		HpLeftLeg = GetFloat(state, "hp_left_leg", 100f);
 		HpRightLeg = GetFloat(state, "hp_right_leg", 100f);
 
-		GD.Print($"[DataManager] 存档数据已加载 | 废土币:{_scrapCurrency}");
+		// 恢复设施等级
+		_facilityLevels = new Dictionary<string, int>();
+		foreach (var kv in state)
+		{
+			if (kv.Key.StartsWith("facility_") && kv.Key.EndsWith("_level"))
+			{
+				string facilityId = kv.Key.Replace("facility_", "").Replace("_level", "");
+				if (int.TryParse(kv.Value, out var lv))
+					_facilityLevels[facilityId] = lv;
+			}
+		}
+
+		_facilityUpgradeProgress = new Dictionary<string, float>();
+		foreach (var kv in state)
+		{
+			if (kv.Key.StartsWith("facility_") && kv.Key.EndsWith("_progress"))
+			{
+				string facilityId = kv.Key.Replace("facility_", "").Replace("_progress", "");
+				if (float.TryParse(kv.Value, out var prog) && prog > 0f)
+					_facilityUpgradeProgress[facilityId] = prog;
+			}
+		}
+
+		GD.Print($"[DataManager] 存档数据已加载 | 废土币:{_scrapCurrency} | 升级进度: {string.Join(", ", _facilityUpgradeProgress.Select(kv => $"{kv.Key}:{kv.Value:F2}"))}");
 		//库存由SaveManager加载 → SetInventory()
 
 	}
