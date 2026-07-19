@@ -218,6 +218,48 @@ public partial class DataManager : Node
 		MarkDirty(key, "");
 	}
 
+	// ═══════════════════════════════════════════════
+	// 商人系统（MerchantSystem 使用）
+	// ═══════════════════════════════════════════════
+
+	private Dictionary<string, string> _merchantStocks = new();
+	private Dictionary<string, long> _merchantLastRefresh = new();
+
+	public Dictionary<string, int> GetMerchantStock(string merchantId)
+	{
+		var result = new Dictionary<string, int>();
+		if (_merchantStocks.TryGetValue(merchantId, out var json) && !string.IsNullOrEmpty(json))
+		{
+			// 简单格式："itemId:qty,itemId:qty"
+			foreach (var part in json.Split(',', StringSplitOptions.RemoveEmptyEntries))
+			{
+				var kv = part.Split(':');
+				if (kv.Length == 2 && int.TryParse(kv[1], out var qty))
+					result[kv[0]] = qty;
+			}
+		}
+		return result;
+	}
+
+	public void SetMerchantStock(string merchantId, Dictionary<string, int> stock)
+	{
+		string json = string.Join(",", stock.Select(kv => $"{kv.Key}:{kv.Value}"));
+		_merchantStocks[merchantId] = json;
+		MarkDirty($"merchant_{merchantId}_stock", json);
+	}
+
+	public bool HasMerchantStock(string merchantId)
+		=> _merchantStocks.ContainsKey(merchantId) &&
+	!string.IsNullOrEmpty(_merchantStocks[merchantId]);
+
+	public long GetMerchantLastRefresh(string merchantId)
+		=> _merchantLastRefresh.TryGetValue(merchantId, out var v) ? v : 0;
+
+	public void SetMerchantLastRefresh(string merchantId, long timestamp)
+	{
+		_merchantLastRefresh[merchantId] = timestamp;
+		MarkDirty($"merchant_{merchantId}_refresh", timestamp.ToString());
+	}
 
 	//=================================================
 	//生命周期
@@ -226,13 +268,22 @@ public partial class DataManager : Node
 	{
 		Instance = this;
 
+		//初始化系统
 		SafeHouseSystem.Init();
+		MerchantSystem.Init();
 
 		// 从 SaveManager 取回存档数据（如果存在）
 		var savedState = SaveManager.Instance.TakeLoadedState();
 		if (savedState != null)
 		{
 			LoadState(savedState);
+		}
+		else
+		{
+			// 新档：初始化默认值
+			_scrapCurrency = 5000;
+			_hunger = 100f;
+			_thirst = 100f;
 		}
 
 		var savedInv = SaveManager.Instance.TakeLoadedInventory();
@@ -245,54 +296,53 @@ public partial class DataManager : Node
 			InventorySystem.InitDefaultItems();  //新档，送
 		}
 
-		GD.Print("═══ TrainingSystem 验证开始 ═══");
+		// ═══ 验证 MerchantSystem ═══
+		GD.Print("═══ MerchantSystem 验证开始 ═══");
 
-		// 1. 初始等级
-		GD.Print($"体能 Lv{TrainingSystem.GetLevel(TrainingSystem.TrainingLine.Stamina)} (应为1)");
-		GD.Print($"靶场 Lv{TrainingSystem.GetLevel(TrainingSystem.TrainingLine.ShootingRange)} (应为1)");
-		GD.Print($"学识 Lv{TrainingSystem.GetLevel(TrainingSystem.TrainingLine.Knowledge)} (应为1)");
+		// 1. 商品列表
+		GD.Print("── 杂货商商品 ──");
+		var junkProducts = MerchantSystem.GetProducts(MerchantSystem.JunkDealer);
+		foreach (var p in junkProducts)
+			GD.Print($"  {p.DisplayName} | 库存:{p.Stock}/{p.MaxStock} | 买价:{p.BuyPrice} | 卖价:{p.SellPrice}");
 
-		// 2. XP 曲线
-		GD.Print("── XP 需求 ──");
-		GD.Print($"Lv1→2: {TrainingSystem.GetXpRequired(1):F2}h (应为0.05)");
-		GD.Print($"Lv10→11: {TrainingSystem.GetXpRequired(10):F2}h (应为1.58)");
-		GD.Print($"Lv29→30: {TrainingSystem.GetXpRequired(29):F2}h (应为7.81)");
+		// 2. 购买
+		GD.Print("── 购买测试 ──");
+		int moneyBefore = DataManager.Instance.ScrapCurrency;
+		GD.Print($"购买前废土币: {moneyBefore}");
 
-		// 3. 开始训练 + 推进进度
-		GD.Print("── 体能训练 ──");
-		TrainingSystem.StartTraining(TrainingSystem.TrainingLine.Stamina);
-		GD.Print($"训练中: {TrainingSystem.IsTraining(TrainingSystem.TrainingLine.Stamina)} (应为True)");
-		GD.Print($"进度: {TrainingSystem.GetProgress(TrainingSystem.TrainingLine.Stamina):P0} (应为0%)");
+		bool bought = MerchantSystem.Buy(MerchantSystem.JunkDealer, "body_ar_t1", 1);
+		GD.Print($"购买body_ar_t1: {(bought ? "成功" : "失败")}");
+		GD.Print($"购买后废土币: {DataManager.Instance.ScrapCurrency} (减少{moneyBefore - DataManager.Instance.ScrapCurrency})");
 
-		// 推进 0.02h (1.2min) → 应该还在 Lv1
-		TrainingSystem.AddProgress(TrainingSystem.TrainingLine.Stamina, 0.02f);
-		GD.Print($"推进0.02h后进度: {TrainingSystem.GetProgress(TrainingSystem.TrainingLine.Stamina):P0} (应为40%)");
+		var stockAfter = MerchantSystem.GetProducts(MerchantSystem.JunkDealer);
+		var bodyStock = stockAfter.First(p => p.ItemId == "body_ar_t1");
+		GD.Print($"body_ar_t1库存: {bodyStock.Stock}/{bodyStock.MaxStock} (应为1/2)");
 
-		// 推进到升级 (还需要 0.03h)
-		TrainingSystem.AddProgress(TrainingSystem.TrainingLine.Stamina, 0.05f);
-		GD.Print($"继续0.05h后 Lv: {TrainingSystem.GetLevel(TrainingSystem.TrainingLine.Stamina)} (应为2)");
-		GD.Print($"新进度: {TrainingSystem.GetProgress(TrainingSystem.TrainingLine.Stamina):P0}");
+		// 3. 库存不足拒绝
+		GD.Print("── 库存不足 ──");
+		bool buyFail = MerchantSystem.Buy(MerchantSystem.GoldenShield, "plate_lighthard_t1", 99);
+		GD.Print($"购买99个plate: {(buyFail ? "成功(不应该)" : "正确拒绝")}");
 
-		// 4. 批量升级测试
-		GD.Print("── 批量升级 Lv2→5 ──");
-		DataManager.Instance.SetTrainingLevel(TrainingSystem.TrainingLine.Knowledge, 2);
-		TrainingSystem.StartTraining(TrainingSystem.TrainingLine.Knowledge);
-		// Lv2: 0.14h, Lv3: 0.26h, Lv4: 0.40h, Lv5: 0.56h  合计≈1.36h
-		TrainingSystem.AddProgress(TrainingSystem.TrainingLine.Knowledge, 2.0f);
-		GD.Print($"学识推进2h后 Lv: {TrainingSystem.GetLevel(TrainingSystem.TrainingLine.Knowledge)} (应为5+)");
+		// 4. 出售
+		GD.Print("── 出售测试 ──");
+		var invSlots = InventorySystem.FindSlots("body_ar_t1");
+		if (invSlots.Count > 0)
+		{
+			int slotId = invSlots[0].SlotId;
+			int moneyBeforeSell = DataManager.Instance.ScrapCurrency;
+			bool sold = MerchantSystem.Sell(MerchantSystem.Vulture, slotId, 1);
+			GD.Print($"出售body_ar_t1: {(sold ? "成功" : "失败")}");
+			GD.Print($"出售后废土币: {DataManager.Instance.ScrapCurrency} (增加{DataManager.Instance.ScrapCurrency - moneyBeforeSell})");
+		}
 
-		// 5. 效果计算
-		GD.Print("── 效果 ──");
-		GD.Print($"体能 轻/中 阈值: {TrainingSystem.GetStaminaLightMax():F1}kg (Lv1→8.5)");
-		GD.Print($"体能 中/重 阈值: {TrainingSystem.GetStaminaMediumMax():F1}kg (Lv1→16)");
-		GD.Print($"靶场 换弹倍率: {TrainingSystem.GetReloadTimeMultiplier():F3} (Lv1→0.980)");
-		GD.Print($"学识 命中加成: {TrainingSystem.GetKnowledgeBonus():F3} (Lv1→1.005)");
+		// 5. 刷新
+		GD.Print("── 刷新 ──");
+		GD.Print($"距下次刷新: {MerchantSystem.GetTimeUntilRefresh(MerchantSystem.JunkDealer):F1}h");
+		MerchantSystem.RefreshMerchant(MerchantSystem.JunkDealer);
+		var refreshed = MerchantSystem.GetProducts(MerchantSystem.JunkDealer);
+		GD.Print($"刷新后body_ar_t1库存: {refreshed.First(p => p.ItemId == "body_ar_t1").Stock} (应为2)");
 
-		// 6. 满级测试
-		GD.Print("── 满级 ──");
-		GD.Print($"Lv30 是满级: {TrainingSystem.IsMaxLevel(TrainingSystem.TrainingLine.Stamina)} (Lv1→False)");
-
-		GD.Print("═══ TrainingSystem 验证结束 ═══");
+		GD.Print("═══ MerchantSystem 验证结束 ═══");
 	}
 
 	// ═══════════════════════════════════════════════
@@ -305,7 +355,7 @@ public partial class DataManager : Node
 
 	public void LoadState(Dictionary<string, string> state)
 	{
-		_scrapCurrency = GetInt(state, "scrap_currency", 500);
+		_scrapCurrency = GetInt(state, "scrap_currency", 5000);
 		_hunger = GetFloat(state, "hunger", 100f);
 		_thirst = GetFloat(state, "thirst", 100f);
 		HpHead = GetFloat(state, "hp_head", 100f);
@@ -350,6 +400,24 @@ public partial class DataManager : Node
 				_trainingLevels[levelKey] = lvInt;
 			if (state.TryGetValue(progKey, out var prog) && float.TryParse(prog, out var progFloat))
 				_trainingProgress[progKey] = progFloat;
+		}
+
+		// 恢复商人状态
+		_merchantStocks = new Dictionary<string, string>();
+		_merchantLastRefresh = new Dictionary<string, long>();
+		foreach (var kv in state)
+		{
+			if (kv.Key.StartsWith("merchant_") && kv.Key.EndsWith("_stock"))
+			{
+				string merchantId = kv.Key.Replace("merchant_", "").Replace("_stock", "");
+				_merchantStocks[merchantId] = kv.Value;
+			}
+			else if (kv.Key.StartsWith("merchant_") && kv.Key.EndsWith("_refresh"))
+			{
+				string merchantId = kv.Key.Replace("merchant_", "").Replace("_refresh", "");
+				if (long.TryParse(kv.Value, out var ts))
+					_merchantLastRefresh[merchantId] = ts;
+			}
 		}
 
 		GD.Print($"[DataManager] 存档数据已加载 | 废土币:{_scrapCurrency} | 升级进度: {string.Join(", ", _facilityUpgradeProgress.Select(kv => $"{kv.Key}:{kv.Value:F2}"))}");

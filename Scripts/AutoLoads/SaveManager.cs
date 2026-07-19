@@ -157,7 +157,7 @@ public partial class SaveManager : Node
 	{
 		var defaults = new Dictionary<string, string>
 		{
-			["scrap_currency"] = "500",
+			["scrap_currency"] = "5000",
 			["hunger"] = "100",
 			["thirst"] = "100",
 			["hp_head"] = "100",
@@ -212,8 +212,6 @@ public partial class SaveManager : Node
 		{
 			state[reader.GetString(0)] = reader.GetString(1);
 		}
-		reader.Close();
-
 		//库存加载
 		var inventortSlots = new List<InventorySlot>();
 		using (var invCmd = new SqliteCommand("SELECT slot_id, item_id, quantity, durability, location FROM inventory", db))
@@ -294,6 +292,11 @@ public partial class SaveManager : Node
 				insCmd.ExecuteNonQuery();
 			}
 
+			//自定义枪械全量覆写
+			using (var delGunsCmd = new SqliteCommand("DELETE FROM custom_guns", db, tx))
+			{
+				delGunsCmd.ExecuteNonQuery();
+			}
 			foreach (var gun in DataManager.Instance.CustomGuns)
 			{
 				GD.Print($"[SaveManager] 写入枪械: {gun.GunName} | ID: {gun.GunId}| 配件: {gun.BodyId}, {gun.BarrelId}, {gun.MagazineId}, {gun.SightId}, {gun.MuzzleId} | 耐久: {gun.Durability}");
@@ -312,7 +315,11 @@ public partial class SaveManager : Node
 				insCmd.ExecuteNonQuery();
 			}
 
-			//custom_armors表
+			//自定义护甲全量覆写
+			using (var delArmorsCmd = new SqliteCommand("DELETE FROM custom_armors", db, tx))
+			{
+				delArmorsCmd.ExecuteNonQuery();
+			}
 			foreach (var armor in DataManager.Instance.CustomArmors)
 			{
 				using var ins = new SqliteCommand(
@@ -339,14 +346,20 @@ public partial class SaveManager : Node
 			tx.Commit();
 			_flushScheduled = false;
 
-
-			//更新 元数据
-			var hash = ComputeHash(db);
-			using var metaCmd = new SqliteCommand(
-				 "UPDATE save_meta SET last_close = @now, hash = @hash WHERE id = 1", db);
-			metaCmd.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
-			metaCmd.Parameters.AddWithValue("@hash", hash);
-			metaCmd.ExecuteNonQuery();
+			//更新元数据（事务外，失败不影响核心流程）
+			try
+			{
+				var hash = ComputeHash(db);
+				using var metaCmd = new SqliteCommand(
+					 "UPDATE save_meta SET last_close = @now, hash = @hash WHERE id = 1", db);
+				metaCmd.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
+				metaCmd.Parameters.AddWithValue("@hash", hash);
+				metaCmd.ExecuteNonQuery();
+			}
+			catch (Exception metaEx)
+			{
+				GD.PushError($"[SaveManager] 元数据更新失败（存档数据已保存）: {metaEx.Message}");
+			}
 
 			RotateBackups();
 			EventBus.Instance.EmitSignal(EventBus.SignalName.SaveCompleted);
@@ -375,8 +388,6 @@ public partial class SaveManager : Node
 		{
 			sb.Append(reader.GetString(0)).Append("=").Append(reader.GetString(1)).Append("\n");
 		}
-		reader.Close();
-
 		var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
 		return Convert.ToHexString(bytes);
 	}
