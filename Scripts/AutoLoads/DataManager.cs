@@ -175,6 +175,50 @@ public partial class DataManager : Node
 		MarkDirty($"facility_{facilityId}_progress", "");
 	}
 
+	// ═══════════════════════════════════════════════
+	// 训练系统（TrainingSystem 使用）
+	// ═══════════════════════════════════════════════
+
+	private Dictionary<string, int> _trainingLevels = new();
+	private Dictionary<string, float> _trainingProgress = new();
+
+	private static string TrainKey(TrainingSystem.TrainingLine line)
+		=> $"train_{line}_level";
+
+	private static string ProgKey(TrainingSystem.TrainingLine line)
+		=> $"train_{line}_progress";
+
+	public int GetTrainingLevel(TrainingSystem.TrainingLine line)
+		=> _trainingLevels.TryGetValue(TrainKey(line), out var v) ? v : 1;
+
+	public void SetTrainingLevel(TrainingSystem.TrainingLine line, int level)
+	{
+		string key = TrainKey(line);
+		_trainingLevels[key] = level;
+		MarkDirty(key, level.ToString());
+	}
+
+	public float GetTrainingProgress(TrainingSystem.TrainingLine line)
+		=> _trainingProgress.TryGetValue(ProgKey(line), out var v) ? v : 0f;
+
+	public void SetTrainingProgress(TrainingSystem.TrainingLine line, float progress)
+	{
+		string key = ProgKey(line);
+		_trainingProgress[key] = progress;
+		MarkDirty(key, progress.ToString("F3"));
+	}
+
+	public bool HasTrainingProgress(TrainingSystem.TrainingLine line)
+		=> _trainingProgress.TryGetValue(ProgKey(line), out var v) && v >= 0f;
+
+	public void ClearTrainingProgress(TrainingSystem.TrainingLine line)
+	{
+		string key = ProgKey(line);
+		_trainingProgress.Remove(key);
+		MarkDirty(key, "");
+	}
+
+
 	//=================================================
 	//生命周期
 	//=================================================
@@ -201,53 +245,54 @@ public partial class DataManager : Node
 			InventorySystem.InitDefaultItems();  //新档，送
 		}
 
-		GD.Print("═══ SafeHouseSystem 验证开始 ═══");
+		GD.Print("═══ TrainingSystem 验证开始 ═══");
 
 		// 1. 初始等级
-		GD.Print($"仓库 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Warehouse)} (应为1)");
-		GD.Print($"工作台 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Workbench)} (应为1)");
-		GD.Print($"健身 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Gym)} (应为1)");
-		GD.Print($"靶场 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Range)} (应为1)");
-		GD.Print($"医务 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Infirmary)} (应为0)");
+		GD.Print($"体能 Lv{TrainingSystem.GetLevel(TrainingSystem.TrainingLine.Stamina)} (应为1)");
+		GD.Print($"靶场 Lv{TrainingSystem.GetLevel(TrainingSystem.TrainingLine.ShootingRange)} (应为1)");
+		GD.Print($"学识 Lv{TrainingSystem.GetLevel(TrainingSystem.TrainingLine.Knowledge)} (应为1)");
 
-		// 2. 解锁状态
-		GD.Print($"工作台已解锁: {SafeHouseSystem.IsUnlocked(SafeHouseSystem.Workbench)} (应为True)");
-		GD.Print($"医务室已解锁: {SafeHouseSystem.IsUnlocked(SafeHouseSystem.Infirmary)} (应为False)");
-		GD.Print($"医务室解锁提示: \"{SafeHouseSystem.GetUnlockHint(SafeHouseSystem.Infirmary)}\"");
+		// 2. XP 曲线
+		GD.Print("── XP 需求 ──");
+		GD.Print($"Lv1→2: {TrainingSystem.GetXpRequired(1):F2}h (应为0.05)");
+		GD.Print($"Lv10→11: {TrainingSystem.GetXpRequired(10):F2}h (应为1.58)");
+		GD.Print($"Lv29→30: {TrainingSystem.GetXpRequired(29):F2}h (应为7.81)");
 
-		// 3. 升级工作台到 Lv2 → 解锁医务室
-		GD.Print("── 升级工作台到 Lv2 ──");
-		DataManager.Instance.SetFacilityLevel(SafeHouseSystem.Workbench, 2);
-		GD.Print($"工作台 Lv{SafeHouseSystem.GetLevel(SafeHouseSystem.Workbench)}");
-		GD.Print($"医务室已解锁: {SafeHouseSystem.IsUnlocked(SafeHouseSystem.Infirmary)} (应为True)");
+		// 3. 开始训练 + 推进进度
+		GD.Print("── 体能训练 ──");
+		TrainingSystem.StartTraining(TrainingSystem.TrainingLine.Stamina);
+		GD.Print($"训练中: {TrainingSystem.IsTraining(TrainingSystem.TrainingLine.Stamina)} (应为True)");
+		GD.Print($"进度: {TrainingSystem.GetProgress(TrainingSystem.TrainingLine.Stamina):P0} (应为0%)");
 
-		// 4. CanUpgrade
-		GD.Print($"工作台可升级: {SafeHouseSystem.CanUpgrade(SafeHouseSystem.Workbench)} (应为True)");
-		DataManager.Instance.SetFacilityLevel(SafeHouseSystem.Workbench, 10);
-		GD.Print($"工作台满级后可升级: {SafeHouseSystem.CanUpgrade(SafeHouseSystem.Workbench)} (应为False)");
+		// 推进 0.02h (1.2min) → 应该还在 Lv1
+		TrainingSystem.AddProgress(TrainingSystem.TrainingLine.Stamina, 0.02f);
+		GD.Print($"推进0.02h后进度: {TrainingSystem.GetProgress(TrainingSystem.TrainingLine.Stamina):P0} (应为40%)");
 
-		// 5. 升级进度
-		GD.Print("── 升级进度 ──");
-		SafeHouseSystem.StartUpgrade(SafeHouseSystem.Gym);
-		GD.Print($"开始升级后进度: {SafeHouseSystem.GetUpgradeProgress(SafeHouseSystem.Gym):P0}");
-		SafeHouseSystem.AddProgress(SafeHouseSystem.Gym, 0.5f);
-		GD.Print($"推进0.5h后进度: {SafeHouseSystem.GetUpgradeProgress(SafeHouseSystem.Gym):P0}");
+		// 推进到升级 (还需要 0.03h)
+		TrainingSystem.AddProgress(TrainingSystem.TrainingLine.Stamina, 0.05f);
+		GD.Print($"继续0.05h后 Lv: {TrainingSystem.GetLevel(TrainingSystem.TrainingLine.Stamina)} (应为2)");
+		GD.Print($"新进度: {TrainingSystem.GetProgress(TrainingSystem.TrainingLine.Stamina):P0}");
 
+		// 4. 批量升级测试
+		GD.Print("── 批量升级 Lv2→5 ──");
+		DataManager.Instance.SetTrainingLevel(TrainingSystem.TrainingLine.Knowledge, 2);
+		TrainingSystem.StartTraining(TrainingSystem.TrainingLine.Knowledge);
+		// Lv2: 0.14h, Lv3: 0.26h, Lv4: 0.40h, Lv5: 0.56h  合计≈1.36h
+		TrainingSystem.AddProgress(TrainingSystem.TrainingLine.Knowledge, 2.0f);
+		GD.Print($"学识推进2h后 Lv: {TrainingSystem.GetLevel(TrainingSystem.TrainingLine.Knowledge)} (应为5+)");
 
-		// 6. 仓库容量
-		GD.Print($"仓库容量 Lv1: {SafeHouseSystem.GetWarehouseCapacity()}格 (应为30)");
-		DataManager.Instance.SetFacilityLevel(SafeHouseSystem.Warehouse, 3);
-		GD.Print($"仓库容量 Lv3: {SafeHouseSystem.GetWarehouseCapacity()}格 (应为48)");
+		// 5. 效果计算
+		GD.Print("── 效果 ──");
+		GD.Print($"体能 轻/中 阈值: {TrainingSystem.GetStaminaLightMax():F1}kg (Lv1→8.5)");
+		GD.Print($"体能 中/重 阈值: {TrainingSystem.GetStaminaMediumMax():F1}kg (Lv1→16)");
+		GD.Print($"靶场 换弹倍率: {TrainingSystem.GetReloadTimeMultiplier():F3} (Lv1→0.980)");
+		GD.Print($"学识 命中加成: {TrainingSystem.GetKnowledgeBonus():F3} (Lv1→1.005)");
 
-		// 7. 医务室回复
-		GD.Print("── 战后治疗 ──");
-		DataManager.Instance.HpHead = 60f;
-		DataManager.Instance.HpChest = 50f;
-		SafeHouseSystem.PostRaidHeal();
-		float healRate = SafeHouseSystem.GetInfirmaryHealRate();
-		GD.Print($"回复率: {healRate:P0} | 头部HP: {DataManager.Instance.HpHead:F0} (应为{60f + 100f * healRate:F0})");
+		// 6. 满级测试
+		GD.Print("── 满级 ──");
+		GD.Print($"Lv30 是满级: {TrainingSystem.IsMaxLevel(TrainingSystem.TrainingLine.Stamina)} (Lv1→False)");
 
-		GD.Print("═══ SafeHouseSystem 验证结束 ═══");
+		GD.Print("═══ TrainingSystem 验证结束 ═══");
 	}
 
 	// ═══════════════════════════════════════════════
@@ -292,6 +337,19 @@ public partial class DataManager : Node
 				if (float.TryParse(kv.Value, out var prog) && prog > 0f)
 					_facilityUpgradeProgress[facilityId] = prog;
 			}
+		}
+
+		// 恢复训练等级和进度
+		_trainingLevels = new Dictionary<string, int>();
+		_trainingProgress = new Dictionary<string, float>();
+		foreach (var line in System.Enum.GetNames(typeof(TrainingSystem.TrainingLine)))
+		{
+			string levelKey = $"train_{line}_level";
+			string progKey = $"train_{line}_progress";
+			if (state.TryGetValue(levelKey, out var lv) && int.TryParse(lv, out var lvInt))
+				_trainingLevels[levelKey] = lvInt;
+			if (state.TryGetValue(progKey, out var prog) && float.TryParse(prog, out var progFloat))
+				_trainingProgress[progKey] = progFloat;
 		}
 
 		GD.Print($"[DataManager] 存档数据已加载 | 废土币:{_scrapCurrency} | 升级进度: {string.Join(", ", _facilityUpgradeProgress.Select(kv => $"{kv.Key}:{kv.Value:F2}"))}");
