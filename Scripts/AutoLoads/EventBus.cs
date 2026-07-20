@@ -41,6 +41,8 @@ public partial class EventBus : Node
 	#region Economy
 	[Signal]
 	public delegate void CurrencyChangedEventHandler(string currencyId, int newValue, int delta);
+	[Signal]
+	public delegate void InsuranceSettledEventHandler(string itemId, bool retained);
 	#endregion
 
 	//===========Save 存档相关=================

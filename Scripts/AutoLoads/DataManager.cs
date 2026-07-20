@@ -296,53 +296,56 @@ public partial class DataManager : Node
 			InventorySystem.InitDefaultItems();  //新档，送
 		}
 
-		// ═══ 验证 MerchantSystem ═══
-		GD.Print("═══ MerchantSystem 验证开始 ═══");
+		GD.Print("═══ InsuranceSystem 验证开始 ═══");
 
-		// 1. 商品列表
-		GD.Print("── 杂货商商品 ──");
-		var junkProducts = MerchantSystem.GetProducts(MerchantSystem.JunkDealer);
-		foreach (var p in junkProducts)
-			GD.Print($"  {p.DisplayName} | 库存:{p.Stock}/{p.MaxStock} | 买价:{p.BuyPrice} | 卖价:{p.SellPrice}");
+		// 准备：组装一把枪和一件护甲用于测试
+		InventorySystem.AddItem("body_ar_t1", 1);
+		InventorySystem.AddItem("barrel_ar_standard_t1", 1);
+		InventorySystem.AddItem("mag_ar_standard_t1", 1);
+		InventorySystem.AddItem("liner_chestrig_t1", 1);
 
-		// 2. 购买
-		GD.Print("── 购买测试 ──");
+		var gun = CustomGunSystem.TryAssemble("body_ar_t1", "barrel_ar_standard_t1", "mag_ar_standard_t1", gunName:
+		"投保测试枪");
+		var armor = ArmorSystem.CreateArmor("liner_chestrig_t1", "投保测试甲");
+
+		// 1. 保费计算
+		GD.Print("── 保费 ──");
+		GD.Print($"秃鹫保费(body_ar_t1): {InsuranceSystem.CalcPremium("body_ar_t1", MerchantSystem.Vulture)}");
+		GD.Print($"金盾保费(body_ar_t1): {InsuranceSystem.CalcPremium("body_ar_t1", MerchantSystem.GoldenShield)}");
+		GD.Print($"杂货商提供投保: {InsuranceSystem.OffersInsurance(MerchantSystem.JunkDealer)} (应为False)");
+
+		// 2. 投保枪械
+		GD.Print("── 投保枪械 ──");
 		int moneyBefore = DataManager.Instance.ScrapCurrency;
-		GD.Print($"购买前废土币: {moneyBefore}");
+		bool insured = InsuranceSystem.InsureGun(gun.GunId, MerchantSystem.Vulture);
+		GD.Print($"投保结果: {(insured ? "成功" : "失败")}");
+		GD.Print($"保费支出: {moneyBefore - DataManager.Instance.ScrapCurrency}");
+		GD.Print($"已投保: {InsuranceSystem.IsInsuredGun(gun.GunId)} (应为True)");
 
-		bool bought = MerchantSystem.Buy(MerchantSystem.JunkDealer, "body_ar_t1", 1);
-		GD.Print($"购买body_ar_t1: {(bought ? "成功" : "失败")}");
-		GD.Print($"购买后废土币: {DataManager.Instance.ScrapCurrency} (减少{moneyBefore - DataManager.Instance.ScrapCurrency})");
+		// 3. 重复投保拒绝
+		GD.Print("── 重复投保 ──");
+		bool dup = InsuranceSystem.InsureGun(gun.GunId, MerchantSystem.GoldenShield);
+		GD.Print($"重复投保: {(dup ? "成功(不应该)" : "正确拒绝")}");
 
-		var stockAfter = MerchantSystem.GetProducts(MerchantSystem.JunkDealer);
-		var bodyStock = stockAfter.First(p => p.ItemId == "body_ar_t1");
-		GD.Print($"body_ar_t1库存: {bodyStock.Stock}/{bodyStock.MaxStock} (应为1/2)");
+		// 4. 投保护甲
+		GD.Print("── 投保护甲 ──");
+		InsuranceSystem.InsureArmor(armor.ArmorId, MerchantSystem.GoldenShield);
+		GD.Print($"护甲已投保: {InsuranceSystem.IsInsuredArmor(armor.ArmorId)} (应为True)");
+		GD.Print($"金盾保留率: {InsuranceSystem.GetRetentionRate(MerchantSystem.GoldenShield):P0} (应为70%)");
+		GD.Print($"秃鹫保留率: {InsuranceSystem.GetRetentionRate(MerchantSystem.Vulture):P0} (应为40%)");
 
-		// 3. 库存不足拒绝
-		GD.Print("── 库存不足 ──");
-		bool buyFail = MerchantSystem.Buy(MerchantSystem.GoldenShield, "plate_lighthard_t1", 99);
-		GD.Print($"购买99个plate: {(buyFail ? "成功(不应该)" : "正确拒绝")}");
-
-		// 4. 出售
-		GD.Print("── 出售测试 ──");
-		var invSlots = InventorySystem.FindSlots("body_ar_t1");
-		if (invSlots.Count > 0)
+		// 5. 死亡结算
+		GD.Print("── 死亡结算（多次抽样）──");
+		int retained = 0;
+		int trials = 100;
+		for (int i = 0; i < trials; i++)
 		{
-			int slotId = invSlots[0].SlotId;
-			int moneyBeforeSell = DataManager.Instance.ScrapCurrency;
-			bool sold = MerchantSystem.Sell(MerchantSystem.Vulture, slotId, 1);
-			GD.Print($"出售body_ar_t1: {(sold ? "成功" : "失败")}");
-			GD.Print($"出售后废土币: {DataManager.Instance.ScrapCurrency} (增加{DataManager.Instance.ScrapCurrency - moneyBeforeSell})");
+			if (GD.Randf() < InsuranceSystem.GetRetentionRate(MerchantSystem.Vulture))
+				retained++;
 		}
+		GD.Print($"秃鹫 100次抽样保留: {retained}/100 (期望 ~40)");
 
-		// 5. 刷新
-		GD.Print("── 刷新 ──");
-		GD.Print($"距下次刷新: {MerchantSystem.GetTimeUntilRefresh(MerchantSystem.JunkDealer):F1}h");
-		MerchantSystem.RefreshMerchant(MerchantSystem.JunkDealer);
-		var refreshed = MerchantSystem.GetProducts(MerchantSystem.JunkDealer);
-		GD.Print($"刷新后body_ar_t1库存: {refreshed.First(p => p.ItemId == "body_ar_t1").Stock} (应为2)");
-
-		GD.Print("═══ MerchantSystem 验证结束 ═══");
+		GD.Print("═══ InsuranceSystem 验证结束 ═══");
 	}
 
 	// ═══════════════════════════════════════════════
